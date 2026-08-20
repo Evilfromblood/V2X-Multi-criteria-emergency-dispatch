@@ -55,3 +55,40 @@ Multi-Criteria-Emergency-Dispatch/
     ├── AnalyticsEngine.cpp
     ├── CLIDashboard.cpp
     └── main.cpp              # Application entry point & simulation modes
+
+
+
+
+Quick Start & Evaluation Guide (For Evaluator / Professor)
+To clone, compile, and execute this project from scratch in any standard terminal (PowerShell, Command Prompt, or Bash):
+
+1. Clone the Repository
+Bash
+git clone [https://github.com/Evilfromblood/multi-criteria-emergency-dispatch.git](https://github.com/Evilfromblood/multi-criteria-emergency-dispatch.git)
+cd multi-criteria-emergency-dispatch
+2. Compilation
+Compile all modular source files linking with the include/ directory using C++17 standard:
+
+Windows (PowerShell / CMD using GCC/MinGW):
+
+PowerShell
+g++ -std=c++17 -I include src/*.cpp -o dispatch_simulation.exe
+Linux / macOS (g++ or clang++):
+
+Bash
+g++ -std=c++17 -I include src/*.cpp -o dispatch_simulation
+3. Execution Commands
+Windows:
+
+PowerShell
+.\dispatch_simulation.exe
+Linux / macOS:
+
+Bash
+./dispatch_simulation
+4. Interactive Simulation Modes
+Upon launch, choose the desired evaluation mode at the CLI prompt:
+
+Enter 1 to run the Scenario Walkthrough: Step-by-step dispatch evaluation showing V2X hazard rerouting, candidate suitability breakdowns, and preemption handling.
+
+Enter 2 to run the Automated Benchmark: High-throughput stress test processing 15 randomized incidents under dynamic weather/traffic conditions with a final KPI summary.
