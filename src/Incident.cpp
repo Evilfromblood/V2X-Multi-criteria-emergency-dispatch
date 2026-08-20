@@ -29,7 +29,19 @@ double Incident::getPosY() const {
     return posY;
 }
 
+double Incident::getX() const {
+    return posX;
+}
+
+double Incident::getY() const {
+    return posY;
+}
+
 int Incident::getSeverityLevel() const {
+    return severityLevel;
+}
+
+int Incident::getSeverity() const {
     return severityLevel;
 }
 
