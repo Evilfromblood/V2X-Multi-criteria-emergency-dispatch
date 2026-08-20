@@ -7,6 +7,7 @@
 #include "Incident.h"
 #include "RoadNetwork.h"
 #include "RouteOptimizer.h"
+#include "AnalyticsEngine.h"
 
 class DispatchCenter {
 private:
@@ -14,6 +15,7 @@ private:
     std::vector<Incident> activeIncidents;
     RoadNetwork* network;
     RouteOptimizer* optimizer;
+    AnalyticsEngine analytics;
 
 public:
     DispatchCenter(RoadNetwork* net = nullptr, RouteOptimizer* opt = nullptr);
@@ -29,6 +31,8 @@ public:
     EmergencyVehicle* findBestVehicle(const Incident& incident, double& bestTime) const;
     void dispatchToIncident(const Incident& incident);
     void dispatchAll(); // Dispatches to all active incidents
+    
+    const AnalyticsEngine& getAnalytics() const { return analytics; }
 };
 
 #endif // DISPATCH_CENTER_H

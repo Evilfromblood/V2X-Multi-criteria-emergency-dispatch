@@ -1,4 +1,5 @@
 #include "DispatchCenter.h"
+#include "CLIDashboard.h"
 #include <iostream>
 #include <iomanip>
 #include <cmath>
@@ -11,12 +12,7 @@ void DispatchCenter::addVehicle(std::unique_ptr<EmergencyVehicle> vehicle) {
 }
 
 void DispatchCenter::printFleetStatus() const {
-    std::cout << "===================================================\n";
-    std::cout << "                 CURRENT FLEET LIST                \n";
-    std::cout << "===================================================\n";
-    for (const auto& vehicle : fleet) {
-        vehicle->displayInfo();
-    }
+    CLIDashboard::printFleetTable(fleet);
 }
 
 void DispatchCenter::addIncident(const Incident& incident) {
@@ -105,6 +101,8 @@ EmergencyVehicle* DispatchCenter::findBestVehicle(const Incident& incident, doub
 }
 
 void DispatchCenter::dispatchToIncident(const Incident& incident) {
+    analytics.incrementIncidentsProcessed();
+
     std::cout << "\n===================================================\n";
     std::cout << " DISPATCH EVALUATION: " << incident.getId() 
               << " (" << incident.getType() << " - Severity " << incident.getSeverityLevel() << ")\n";
@@ -113,33 +111,59 @@ void DispatchCenter::dispatchToIncident(const Incident& incident) {
     double bestTime = -1.0;
     EmergencyVehicle* bestVehicle = findBestVehicle(incident, bestTime);
     
+    DispatchRecord record;
+    record.incidentId = incident.getId();
+    record.incidentType = incident.getType();
+    record.severity = incident.getSeverityLevel();
+    record.preempted = false;
+    record.travelTimeMinutes = bestTime;
+    record.routeDistanceKm = 0.0;
+    record.assignedVehicleId = "None";
+    record.vehicleType = "None";
+
     if (bestVehicle != nullptr) {
         if (!bestVehicle->isAvailable()) {
             std::cout << ">>> [PREEMPTION TRIGGERED] Re-routing " << bestVehicle->getId() 
                       << " from Incident " << bestVehicle->getAssignedIncidentId() 
                       << " to Critical Incident " << incident.getId() << "\n";
+            record.preempted = true;
         }
-        std::cout << ">>> DISPATCH DECISION: Assigning " << bestVehicle->getId() 
-                  << " to " << incident.getId() << "\n";
+        
+        record.assignedVehicleId = bestVehicle->getId();
+        record.vehicleType = bestVehicle->getVehicleType();
+        
+        RouteResult finalRoute;
+        finalRoute.reachable = false;
+        
         if (bestTime >= 0.0) {
-            std::cout << "    Estimated Travel Time: " << std::fixed << std::setprecision(1) << bestTime << " mins\n";
-            // Optionally output the route if network exists
+            // Recalculate route just to show and get distance
             if (network && optimizer) {
                 std::string vNode = network->getNearestNode(bestVehicle->getPosX(), bestVehicle->getPosY());
                 std::string iNode = network->getNearestNode(incident.getPosX(), incident.getPosY());
-                RouteResult route = optimizer->calculateFastestRoute(*network, vNode, iNode);
-                std::cout << "    Route: ";
-                for (size_t i = 0; i < route.pathNodes.size(); ++i) {
-                    std::cout << route.pathNodes[i] << (i + 1 == route.pathNodes.size() ? "" : " -> ");
+                finalRoute = optimizer->calculateFastestRoute(*network, vNode, iNode);
+                if (finalRoute.reachable) {
+                    record.routeDistanceKm = finalRoute.totalDistanceKm;
                 }
-                std::cout << "\n";
+            } else {
+                double dx = incident.getPosX() - bestVehicle->getPosX();
+                double dy = incident.getPosY() - bestVehicle->getPosY();
+                record.routeDistanceKm = std::sqrt(dx * dx + dy * dy);
+                finalRoute.reachable = true;
+                finalRoute.estimatedTimeMinutes = bestTime;
+                finalRoute.totalDistanceKm = record.routeDistanceKm;
             }
         }
+        
+        double score = bestVehicle->calculateSuitability(incident, bestTime);
+        CLIDashboard::printDispatchDecision(incident, bestVehicle, finalRoute, score);
+        
         bestVehicle->setAssignedIncident(incident.getId(), incident.getSeverityLevel());
     } else {
         std::cout << ">>> DISPATCH DECISION: No suitable vehicles available for " 
                   << incident.getId() << "!\n";
     }
+    
+    analytics.logDispatch(record);
 }
 
 void DispatchCenter::dispatchAll() {
