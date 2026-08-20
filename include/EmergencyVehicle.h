@@ -3,7 +3,7 @@
 
 #include <string>
 
-class Incident;  // Declared now; implemented in a later phase.
+class Incident; // Forward declaration
 
 class EmergencyVehicle {
 protected:
@@ -21,17 +21,22 @@ public:
 
     virtual ~EmergencyVehicle();
 
+    // Pure virtual functions for polymorphism
     virtual double calculateSuitability(const Incident& incident) const = 0;
     virtual void displayInfo() const = 0;
     virtual std::string getVehicleType() const = 0;
 
+    // Getters
     std::string getId() const;
-    double getX() const;
-    double getY() const;
+    double getPosX() const;
+    double getPosY() const;
     double getSpeedKmH() const;
     bool isAvailable() const;
 
+    // Setters
     void setAvailable(bool status);
+    void setPosition(double x, double y);
+    void setSpeedKmH(double speed);
 };
 
-#endif
+#endif // EMERGENCY_VEHICLE_H

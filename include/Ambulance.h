@@ -24,4 +24,4 @@ public:
     bool hasParamedicOnBoard() const;
 };
 
-#endif
+#endif // AMBULANCE_H

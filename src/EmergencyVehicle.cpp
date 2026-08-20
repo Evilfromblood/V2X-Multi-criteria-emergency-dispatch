@@ -18,11 +18,11 @@ std::string EmergencyVehicle::getId() const {
     return vehicleId;
 }
 
-double EmergencyVehicle::getX() const {
+double EmergencyVehicle::getPosX() const {
     return posX;
 }
 
-double EmergencyVehicle::getY() const {
+double EmergencyVehicle::getPosY() const {
     return posY;
 }
 
@@ -36,4 +36,13 @@ bool EmergencyVehicle::isAvailable() const {
 
 void EmergencyVehicle::setAvailable(bool status) {
     available = status;
+}
+
+void EmergencyVehicle::setPosition(double x, double y) {
+    posX = x;
+    posY = y;
+}
+
+void EmergencyVehicle::setSpeedKmH(double speed) {
+    speedKmH = speed;
 }
