@@ -5,14 +5,18 @@
 #include <memory>
 #include "EmergencyVehicle.h"
 #include "Incident.h"
+#include "RoadNetwork.h"
+#include "RouteOptimizer.h"
 
 class DispatchCenter {
 private:
     std::vector<std::unique_ptr<EmergencyVehicle>> fleet;
     std::vector<Incident> activeIncidents;
+    RoadNetwork* network;
+    RouteOptimizer* optimizer;
 
 public:
-    DispatchCenter();
+    DispatchCenter(RoadNetwork* net = nullptr, RouteOptimizer* opt = nullptr);
 
     // Fleet management
     void addVehicle(std::unique_ptr<EmergencyVehicle> vehicle);
@@ -22,7 +26,7 @@ public:
     void addIncident(const Incident& incident);
     
     // Dispatch logic
-    EmergencyVehicle* findBestVehicle(const Incident& incident) const;
+    EmergencyVehicle* findBestVehicle(const Incident& incident, double& bestTime) const;
     void dispatchToIncident(const Incident& incident);
     void dispatchAll(); // Dispatches to all active incidents
 };

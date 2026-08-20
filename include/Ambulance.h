@@ -16,7 +16,7 @@ public:
               int triageLevel,
               bool paramedicAvailable);
 
-    double calculateSuitability(const Incident& incident) const override;
+    double calculateSuitability(const Incident& incident, double travelTimeMin) const override;
     void displayInfo() const override;
     std::string getVehicleType() const override;
 

@@ -6,17 +6,19 @@
 #include "FireEngine.h"
 #include "RoadNetwork.h"
 #include "V2XHub.h"
+#include "RouteOptimizer.h"
 
 int main() {
     std::cout << "===================================================\n";
     std::cout << "  Multi-Criteria Emergency Dispatch Simulation System\n";
-    std::cout << "     Phase 3: V2X Road Network & Live Hazards      \n";
+    std::cout << "  Phase 4: Dynamic Route Optimization & Rescheduling\n";
     std::cout << "===================================================\n\n";
 
     // Initialize Road Network
     RoadNetwork roadNetwork;
+    RouteOptimizer routeOptimizer;
     
-    // Add 6-8 intersections
+    // Add 6 intersections
     roadNetwork.addIntersection("A", 10.0, 10.0);
     roadNetwork.addIntersection("B", 30.0, 10.0);
     roadNetwork.addIntersection("C", 30.0, 30.0);
@@ -35,8 +37,6 @@ int main() {
     roadNetwork.addRoadSegment("D", "E", 14.1, 50.0);
     roadNetwork.addRoadSegment("C", "F", 28.2, 80.0);
 
-    roadNetwork.displayNetwork();
-
     // Initialize V2X Hub
     V2XHub v2xHub;
     
@@ -47,46 +47,43 @@ int main() {
     v2xHub.displayActiveHazards();
     roadNetwork.displayNetwork();
 
-    DispatchCenter dispatchCenter;
+    DispatchCenter dispatchCenter(&roadNetwork, &routeOptimizer);
 
     // 1. Create and add Fleet
-    // (using positions close to some nodes)
     dispatchCenter.addVehicle(std::make_unique<Ambulance>("AMB-01", 10.0, 10.0, 80.0, 5, true)); // At Node A
     auto amb2 = std::make_unique<Ambulance>("AMB-02", 50.0, 50.0, 75.0, 3, false); // At Node F
-    amb2->setAvailable(false);
+    amb2->setAvailable(false); // Busy
     dispatchCenter.addVehicle(std::move(amb2));
     
     dispatchCenter.addVehicle(std::make_unique<FireEngine>("ENG-01", 30.0, 10.0, 65.0, 4000.0, 30.0)); // At Node B
-    dispatchCenter.addVehicle(std::make_unique<FireEngine>("ENG-02", 10.0, 30.0, 60.0, 2000.0, 15.0)); // At Node D
+    auto eng2 = std::make_unique<FireEngine>("ENG-02", 10.0, 30.0, 60.0, 2000.0, 15.0); // At Node D
+    eng2->setAvailable(false); // Make busy to test preemption later
+    dispatchCenter.addVehicle(std::move(eng2));
 
     // Display Fleet Details
     std::cout << "\n";
     dispatchCenter.printFleetStatus();
 
-    // 2. Create and add active Incidents
-    // (associate with nodes)
-    Incident medicalIncident("INC-101", "Medical", 20.0, 20.0, 4); // At Node E
-    Incident fireIncident("INC-102", "Fire", 30.0, 30.0, 5); // At Node C
+    // 2. Initial Incidents
+    Incident minorFire("INC-101", "Fire", 30.0, 10.0, 2); // Minor fire at Node B
+    std::cout << "\n--- Initial Incident ---\n";
+    minorFire.displayInfo();
+
+    dispatchCenter.dispatchToIncident(minorFire);
+
+    // Now ENG-01 is assigned to INC-101 (Severity 2).
+    // Let's create a Critical Incident that needs a FireEngine.
+    Incident criticalFire("INC-102", "Fire", 20.0, 20.0, 5); // Critical fire at Node E (Central)
     
-    std::cout << "\n";
-    medicalIncident.displayInfo();
-    std::cout << "\n";
-    fireIncident.displayInfo();
-    std::cout << "\n";
+    std::cout << "\n--- Critical Incident Occurs ---\n";
+    criticalFire.displayInfo();
 
-    dispatchCenter.addIncident(medicalIncident);
-    dispatchCenter.addIncident(fireIncident);
+    // 3. Dispatch to Critical Incident
+    // Since ENG-02 is busy and ENG-01 is on a Severity 2 incident, ENG-01 should be preempted.
+    dispatchCenter.dispatchToIncident(criticalFire);
 
-    // 3. Dispatch to all incidents
-    dispatchCenter.dispatchAll();
-
-    // 4. Print Fleet Status after dispatch
     std::cout << "\n[Status Update] Fleet after dispatching:\n";
     dispatchCenter.printFleetStatus();
-
-    std::cout << "\n[Simulation] Resolving hazards...\n";
-    v2xHub.resolveHazard(roadNetwork, "C", "F");
-    v2xHub.displayActiveHazards();
 
     std::cout << "\n===================================================\n";
     std::cout << " Dispatch Simulation completed successfully.\n";

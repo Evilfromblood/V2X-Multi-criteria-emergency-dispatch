@@ -31,6 +31,8 @@ public:
     void displayNetwork() const;
     RoadSegment* getSegment(const std::string& u, const std::string& v);
     const std::unordered_map<std::string, std::vector<RoadSegment>>& getAdjacencyList() const;
+    const std::unordered_map<std::string, Intersection>& getIntersections() const;
+    std::string getNearestNode(double x, double y) const;
 };
 
 #endif // ROAD_NETWORK_H

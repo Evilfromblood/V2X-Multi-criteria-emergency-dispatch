@@ -15,18 +15,14 @@ FireEngine::FireEngine(const std::string& id,
       ladderLengthMeters(ladderLength) {
 }
 
-double FireEngine::calculateSuitability(const Incident& incident) const {
+double FireEngine::calculateSuitability(const Incident& incident, double travelTimeMin) const {
     if (!available) {
         return 0.0;
     }
 
-    // Distance calculation
-    double dx = incident.getPosX() - posX;
-    double dy = incident.getPosY() - posY;
-    double distanceKm = std::sqrt(dx * dx + dy * dy);
-
-    // Estimated travel time in minutes
-    double travelTimeMin = (distanceKm / speedKmH) * 60.0;
+    if (travelTimeMin < 0) {
+        return 0.0; // Unreachable
+    }
 
     double score = 100.0 - (travelTimeMin * 1.5);
 

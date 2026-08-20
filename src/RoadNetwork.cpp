@@ -38,3 +38,21 @@ RoadSegment* RoadNetwork::getSegment(const std::string& u, const std::string& v)
 const std::unordered_map<std::string, std::vector<RoadSegment>>& RoadNetwork::getAdjacencyList() const {
     return adjacencyList;
 }
+
+const std::unordered_map<std::string, Intersection>& RoadNetwork::getIntersections() const {
+    return intersections;
+}
+
+std::string RoadNetwork::getNearestNode(double x, double y) const {
+    std::string nearest = "";
+    double min_dist = -1.0;
+    
+    for (const auto& pair : intersections) {
+        double dist = (pair.second.x - x) * (pair.second.x - x) + (pair.second.y - y) * (pair.second.y - y);
+        if (min_dist < 0 || dist < min_dist) {
+            min_dist = dist;
+            nearest = pair.first;
+        }
+    }
+    return nearest;
+}
