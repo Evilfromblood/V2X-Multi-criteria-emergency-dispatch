@@ -1,55 +1,73 @@
 #include "Incident.h"
-#include <iostream>
+#include <sstream>
+#include <iomanip>
 
-Incident::Incident(const std::string& id,
-                   const std::string& type,
-                   double x,
-                   double y,
-                   int severity)
-    : incidentId(id),
-      type(type),
-      posX(x),
-      posY(y),
-      severityLevel(severity) {
+Incident::Incident(std::string id, std::string type, int severity, double x, double y, 
+                   std::string description)
+    : m_id(id), m_type(type), m_severity(severity), m_x(x), m_y(y), m_description(description) {
+    if (m_severity < 1) m_severity = 1;
+    if (m_severity > 5) m_severity = 5;
+    determineRequirements();
 }
 
-std::string Incident::getId() const {
-    return incidentId;
+void Incident::determineRequirements() {
+    if (m_type == "FIRE") {
+        if (m_severity >= 4) {
+            // High severity fire requires combined fire suppression and paramedic/ambulance backup
+            m_requiredFireEngines = 1;
+            m_requiredAmbulances = 1;
+            m_requiresParamedic = false;
+        } else {
+            m_requiredFireEngines = 1;
+            m_requiredAmbulances = 0;
+            m_requiresParamedic = false;
+        }
+    } else if (m_type == "RESCUE") {
+        if (m_severity >= 4) {
+            // Complex vehicular/technical extrication
+            m_requiredFireEngines = 1;
+            m_requiredAmbulances = 1;
+            m_requiresParamedic = true;
+        } else {
+            m_requiredFireEngines = 1;
+            m_requiredAmbulances = 0;
+            m_requiresParamedic = false;
+        }
+    } else if (m_type == "HAZMAT") {
+        m_requiredFireEngines = 1;
+        m_requiredAmbulances = 1;
+        m_requiresParamedic = true;
+    } else {
+        // Standard MEDICAL
+        m_requiredFireEngines = 0;
+        m_requiredAmbulances = 1;
+        m_requiresParamedic = (m_severity >= 4);
+    }
 }
 
-std::string Incident::getType() const {
-    return type;
-}
-
-double Incident::getPosX() const {
-    return posX;
-}
-
-double Incident::getPosY() const {
-    return posY;
-}
-
-double Incident::getX() const {
-    return posX;
-}
-
-double Incident::getY() const {
-    return posY;
-}
-
-int Incident::getSeverityLevel() const {
-    return severityLevel;
-}
-
-int Incident::getSeverity() const {
-    return severityLevel;
-}
-
-void Incident::displayInfo() const {
-    std::cout << "--- Incident Information ---\n";
-    std::cout << "Incident ID: " << incidentId << "\n";
-    std::cout << "Type:        " << type << "\n";
-    std::cout << "Location:    (" << posX << ", " << posY << ")\n";
-    std::cout << "Severity:    " << severityLevel << "/5\n";
-    std::cout << "----------------------------\n";
+std::string Incident::toJson() const {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2);
+    oss << "{\"id\":\"" << m_id << "\","
+        << "\"type\":\"" << m_type << "\","
+        << "\"severity\":" << m_severity << ","
+        << "\"x\":" << m_x << ","
+        << "\"y\":" << m_y << ","
+        << "\"nearestNodeId\":\"" << m_nearestNodeId << "\","
+        << "\"description\":\"" << m_description << "\","
+        << "\"status\":\"" << m_status << "\","
+        << "\"requiredAmbulances\":" << m_requiredAmbulances << ","
+        << "\"requiredFireEngines\":" << m_requiredFireEngines << ","
+        << "\"requiresParamedic\":" << (m_requiresParamedic ? "true" : "false") << ","
+        << "\"createdAtMinutes\":" << m_createdAtMinutes << ","
+        << "\"dispatchedAtMinutes\":" << m_dispatchedAtMinutes << ","
+        << "\"firstArrivalMinutes\":" << m_firstArrivalMinutes << ","
+        << "\"resolvedAtMinutes\":" << m_resolvedAtMinutes << ","
+        << "\"assignedVehicles\":[";
+    for (size_t i = 0; i < m_assignedVehicleIds.size(); ++i) {
+        if (i > 0) oss << ",";
+        oss << "\"" << m_assignedVehicleIds[i] << "\"";
+    }
+    oss << "]}";
+    return oss.str();
 }

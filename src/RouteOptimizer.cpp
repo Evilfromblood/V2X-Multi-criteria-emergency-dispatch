@@ -1,87 +1,106 @@
 #include "RouteOptimizer.h"
+#include <cmath>
 #include <queue>
 #include <unordered_map>
 #include <limits>
 #include <algorithm>
 
-RouteResult RouteOptimizer::calculateFastestRoute(const RoadNetwork& network, const std::string& startNode, const std::string& endNode) const {
+double RouteOptimizer::calculateSegmentTravelTimeMinutes(const RoadSegment& segment) {
+    if (segment.isBlocked) {
+        return std::numeric_limits<double>::infinity();
+    }
+    double multiplier = (segment.congestionMultiplier < 1.0) ? 1.0 : segment.congestionMultiplier;
+    double speedKmH = (segment.speedLimitKmH <= 0.0) ? 50.0 : segment.speedLimitKmH;
+    double timeHours = (segment.lengthKm / speedKmH) * multiplier;
+    return timeHours * 60.0;
+}
+
+RouteResult RouteOptimizer::findShortestRoute(const RoadNetwork& network, 
+                                             const std::string& startNodeId, 
+                                             const std::string& endNodeId) const {
     RouteResult result;
     result.reachable = false;
     result.totalDistanceKm = 0.0;
     result.estimatedTimeMinutes = 0.0;
 
-    if (startNode == endNode) {
+    if (!network.hasNode(startNodeId) || !network.hasNode(endNodeId)) {
+        return result;
+    }
+
+    if (startNodeId == endNodeId) {
         result.reachable = true;
-        result.pathNodes.push_back(startNode);
+        result.pathNodes.push_back(startNodeId);
         return result;
     }
 
-    const auto& adjacencyList = network.getAdjacencyList();
-    if (adjacencyList.find(startNode) == adjacencyList.end() || adjacencyList.find(endNode) == adjacencyList.end()) {
-        return result;
+    // Min-heap: pair<travelTimeMinutes, nodeId>
+    typedef std::pair<double, std::string> Element;
+    std::priority_queue<Element, std::vector<Element>, std::greater<Element>> pq;
+
+    std::unordered_map<std::string, double> minTime;
+    std::unordered_map<std::string, double> distanceSoFar;
+    std::unordered_map<std::string, std::string> prevNode;
+    std::unordered_map<std::string, double> prevEdgeDistance;
+
+    for (const auto& pair : network.getAllNodes()) {
+        minTime[pair.first] = std::numeric_limits<double>::infinity();
+        distanceSoFar[pair.first] = 0.0;
     }
 
-    std::unordered_map<std::string, double> minTimes;
-    std::unordered_map<std::string, std::string> previousNode;
-    std::unordered_map<std::string, double> distances; // Track distance to reconstruct path cost
-
-    for (const auto& pair : network.getIntersections()) {
-        minTimes[pair.first] = std::numeric_limits<double>::infinity();
-    }
-    
-    minTimes[startNode] = 0.0;
-    distances[startNode] = 0.0;
-
-    using QueueElement = std::pair<double, std::string>;
-    std::priority_queue<QueueElement, std::vector<QueueElement>, std::greater<QueueElement>> pq;
-    pq.push({0.0, startNode});
+    minTime[startNodeId] = 0.0;
+    pq.push({0.0, startNodeId});
 
     while (!pq.empty()) {
-        double current_time = pq.top().first;
-        std::string u = pq.top().second;
+        auto [currentTime, u] = pq.top();
         pq.pop();
 
-        if (u == endNode) {
-            break;
-        }
-
-        if (current_time > minTimes[u]) {
+        if (currentTime > minTime[u]) {
             continue;
         }
 
-        auto it = adjacencyList.find(u);
-        if (it != adjacencyList.end()) {
-            for (const auto& edge : it->second) {
-                if (edge.isBlocked) {
-                    continue;
-                }
+        if (u == endNodeId) {
+            break; // Reached destination with optimal time
+        }
 
-                double edgeTime = (edge.lengthKm / edge.speedLimitKmH) * edge.congestionMultiplier * 60.0;
-                double newTime = current_time + edgeTime;
+        for (const auto& edge : network.getOutgoingSegments(u)) {
+            if (edge.isBlocked) {
+                continue;
+            }
 
-                if (newTime < minTimes[edge.toNode]) {
-                    minTimes[edge.toNode] = newTime;
-                    distances[edge.toNode] = distances[u] + edge.lengthKm;
-                    previousNode[edge.toNode] = u;
-                    pq.push(std::make_pair(newTime, edge.toNode));
-                }
+            double edgeTime = calculateSegmentTravelTimeMinutes(edge);
+            if (std::isinf(edgeTime)) {
+                continue;
+            }
+
+            double newTime = currentTime + edgeTime;
+            if (newTime < minTime[edge.toNode]) {
+                minTime[edge.toNode] = newTime;
+                distanceSoFar[edge.toNode] = distanceSoFar[u] + edge.lengthKm;
+                prevNode[edge.toNode] = u;
+                prevEdgeDistance[edge.toNode] = edge.lengthKm;
+                pq.push({newTime, edge.toNode});
             }
         }
     }
 
-    if (minTimes[endNode] != std::numeric_limits<double>::infinity()) {
-        result.reachable = true;
-        result.estimatedTimeMinutes = minTimes[endNode];
-        result.totalDistanceKm = distances[endNode];
-
-        std::string curr = endNode;
-        while (curr != startNode) {
-            result.pathNodes.push_back(curr);
-            curr = previousNode[curr];
-        }
-        result.pathNodes.push_back(startNode);
-        std::reverse(result.pathNodes.begin(), result.pathNodes.end());
+    if (std::isinf(minTime[endNodeId])) {
+        return result; // Unreachable
     }
+
+    // Reconstruct path
+    std::vector<std::string> path;
+    std::string curr = endNodeId;
+    while (curr != startNodeId && prevNode.find(curr) != prevNode.end()) {
+        path.push_back(curr);
+        curr = prevNode[curr];
+    }
+    path.push_back(startNodeId);
+    std::reverse(path.begin(), path.end());
+
+    result.reachable = true;
+    result.pathNodes = path;
+    result.estimatedTimeMinutes = minTime[endNodeId];
+    result.totalDistanceKm = distanceSoFar[endNodeId];
 
     return result;
 }

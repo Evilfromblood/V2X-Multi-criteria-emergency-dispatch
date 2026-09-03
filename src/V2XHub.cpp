@@ -1,58 +1,81 @@
 #include "V2XHub.h"
-#include <iostream>
+#include <sstream>
+#include <iomanip>
 #include <algorithm>
 
-void V2XHub::broadcastHazard(RoadNetwork& network, const V2XReport& report) {
-    activeHazards.push_back(report);
-
-    RoadSegment* forward = network.getSegment(report.segmentFrom, report.segmentTo);
-    RoadSegment* backward = network.getSegment(report.segmentTo, report.segmentFrom);
-
-    if (forward) {
-        forward->congestionMultiplier = report.severityMultiplier;
-        forward->isBlocked = report.roadClosed;
+bool V2XHub::broadcastHazard(RoadNetwork& network, const std::string& from, const std::string& to,
+                             const std::string& hazardType, double multiplier, bool isBlocked,
+                             const std::string& description, double timestamp) {
+    bool netUpdated = network.updateSegmentHazard(from, to, hazardType, multiplier, isBlocked);
+    if (!netUpdated) {
+        return false;
     }
-    if (backward) {
-        backward->congestionMultiplier = report.severityMultiplier;
-        backward->isBlocked = report.roadClosed;
+
+    // Check if hazard already exists for this edge
+    bool found = false;
+    for (auto& alert : m_activeHazards) {
+        if ((alert.fromNode == from && alert.toNode == to) ||
+            (alert.fromNode == to && alert.toNode == from)) {
+            alert.hazardType = hazardType;
+            alert.congestionMultiplier = multiplier;
+            alert.isBlocked = isBlocked;
+            alert.description = description.empty() ? (hazardType + " reported on " + from + "-" + to) : description;
+            alert.timestampMinutes = timestamp;
+            found = true;
+            break;
+        }
     }
-    
-    std::cout << "[V2X ALERT] Hazard reported on segment " << report.segmentFrom << "-" << report.segmentTo 
-              << ": " << report.hazardType << ". Severity: " << report.severityMultiplier << "x, Closed: " << (report.roadClosed ? "Yes" : "No") << "\n";
+
+    if (!found) {
+        HazardAlert alert;
+        alert.id = "HAZ-" + std::to_string(m_hazardCounter++);
+        alert.fromNode = from;
+        alert.toNode = to;
+        alert.hazardType = hazardType;
+        alert.congestionMultiplier = multiplier;
+        alert.isBlocked = isBlocked;
+        alert.timestampMinutes = timestamp;
+        alert.description = description.empty() ? (hazardType + " reported on " + from + "-" + to) : description;
+        m_activeHazards.push_back(alert);
+    }
+
+    return true;
 }
 
-void V2XHub::resolveHazard(RoadNetwork& network, const std::string& u, const std::string& v) {
-    RoadSegment* forward = network.getSegment(u, v);
-    RoadSegment* backward = network.getSegment(v, u);
+bool V2XHub::resolveHazard(RoadNetwork& network, const std::string& from, const std::string& to) {
+    network.resolveSegmentHazard(from, to);
 
-    if (forward) {
-        forward->congestionMultiplier = 1.0;
-        forward->isBlocked = false;
-    }
-    if (backward) {
-        backward->congestionMultiplier = 1.0;
-        backward->isBlocked = false;
-    }
+    auto it = std::remove_if(m_activeHazards.begin(), m_activeHazards.end(),
+        [&](const HazardAlert& a) {
+            return (a.fromNode == from && a.toNode == to) || (a.fromNode == to && a.toNode == from);
+        });
 
-    activeHazards.erase(
-        std::remove_if(activeHazards.begin(), activeHazards.end(), 
-            [&](const V2XReport& r) { 
-                return (r.segmentFrom == u && r.segmentTo == v) || (r.segmentFrom == v && r.segmentTo == u); 
-            }), 
-        activeHazards.end()
-    );
-
-    std::cout << "[V2X CLEAR] Hazard resolved on segment " << u << "-" << v << ". Normal traffic resumed.\n";
+    bool removed = (it != m_activeHazards.end());
+    m_activeHazards.erase(it, m_activeHazards.end());
+    return removed;
 }
 
-void V2XHub::displayActiveHazards() const {
-    std::cout << "\n--- Active V2X Hazards ---\n";
-    if (activeHazards.empty()) {
-        std::cout << "No active hazards.\n";
-        return;
+void V2XHub::clearAllHazards(RoadNetwork& network) {
+    network.clearAllHazards();
+    m_activeHazards.clear();
+}
+
+std::string V2XHub::toJson() const {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2);
+    oss << "[";
+    for (size_t i = 0; i < m_activeHazards.size(); ++i) {
+        if (i > 0) oss << ",";
+        const auto& h = m_activeHazards[i];
+        oss << "{\"id\":\"" << h.id << "\","
+            << "\"from\":\"" << h.fromNode << "\","
+            << "\"to\":\"" << h.toNode << "\","
+            << "\"hazardType\":\"" << h.hazardType << "\","
+            << "\"congestionMultiplier\":" << h.congestionMultiplier << ","
+            << "\"isBlocked\":" << (h.isBlocked ? "true" : "false") << ","
+            << "\"timestampMinutes\":" << h.timestampMinutes << ","
+            << "\"description\":\"" << h.description << "\"}";
     }
-    for (const auto& hazard : activeHazards) {
-        std::cout << "Segment [" << hazard.segmentFrom << " -> " << hazard.segmentTo << "] - "
-                  << hazard.hazardType << " (Severity: " << hazard.severityMultiplier << "x, Closed: " << (hazard.roadClosed ? "Yes" : "No") << ")\n";
-    }
+    oss << "]";
+    return oss.str();
 }

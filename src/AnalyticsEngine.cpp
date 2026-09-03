@@ -1,38 +1,94 @@
 #include "AnalyticsEngine.h"
-#include <iostream>
+#include <sstream>
 #include <iomanip>
 
-void AnalyticsEngine::logDispatch(const DispatchRecord& record) {
-    records.push_back(record);
+void AnalyticsEngine::logEvent(double timestamp, const std::string& type, 
+                              const std::string& incidentId, const std::string& vehicleId, 
+                              const std::string& message) {
+    DispatchEvent ev;
+    ev.timestamp = timestamp;
+    ev.type = type;
+    ev.incidentId = incidentId;
+    ev.vehicleId = vehicleId;
+    ev.message = message;
+    m_events.push_back(ev);
+
+    // Limit log size to 100 recent entries
+    if (m_events.size() > 100) {
+        m_events.erase(m_events.begin());
+    }
 }
 
-void AnalyticsEngine::renderAnalyticsSummary() const {
-    int successCount = 0;
-    double totalETA = 0.0;
-    double totalDistance = 0.0;
-    int preemptionCount = 0;
+void AnalyticsEngine::recordIncidentDispatched() {
+    m_dispatchedCount++;
+    m_totalIncidents++;
+}
 
-    for (const auto& r : records) {
-        if (!r.assignedVehicleId.empty() && r.assignedVehicleId != "None") {
-            successCount++;
-            totalETA += r.travelTimeMinutes;
-            totalDistance += r.routeDistanceKm;
-        }
-        if (r.preempted) {
-            preemptionCount++;
-        }
+void AnalyticsEngine::recordIncidentResolved(double arrivalEtaMinutes, double totalDurationMinutes) {
+    m_resolvedCount++;
+    if (arrivalEtaMinutes >= 0.0) {
+        m_sumEtaMinutes += arrivalEtaMinutes;
+        m_etaSampleCount++;
     }
+    m_sumDurationMinutes += totalDurationMinutes;
+}
 
-    double successRate = totalIncidentsProcessed > 0 ? (static_cast<double>(successCount) / totalIncidentsProcessed) * 100.0 : 0.0;
-    double meanETA = successCount > 0 ? totalETA / successCount : 0.0;
+void AnalyticsEngine::recordPreemption() {
+    m_preemptionCount++;
+}
 
-    std::cout << "\n===================================================\n";
-    std::cout << "               ANALYTICS KPI SUMMARY               \n";
-    std::cout << "===================================================\n";
-    std::cout << std::left << std::setw(30) << "Total Incidents Processed:" << totalIncidentsProcessed << "\n";
-    std::cout << std::left << std::setw(30) << "Dispatch Success Rate:" << std::fixed << std::setprecision(1) << successRate << "%\n";
-    std::cout << std::left << std::setw(30) << "Mean ETA:" << std::fixed << std::setprecision(2) << meanETA << " mins\n";
-    std::cout << std::left << std::setw(30) << "Total Fleet Distance:" << std::fixed << std::setprecision(2) << totalDistance << " km\n";
-    std::cout << std::left << std::setw(30) << "Preemption Count:" << preemptionCount << "\n";
-    std::cout << "===================================================\n";
+void AnalyticsEngine::recordDynamicReroute() {
+    m_rerouteCount++;
+}
+
+void AnalyticsEngine::recordDistanceTraveled(double km) {
+    m_totalDistanceTraveledKm += km;
+}
+
+double AnalyticsEngine::getMeanEtaMinutes() const {
+    if (m_etaSampleCount == 0) return 0.0;
+    return m_sumEtaMinutes / m_etaSampleCount;
+}
+
+double AnalyticsEngine::getSuccessRatePercent() const {
+    if (m_totalIncidents == 0) return 100.0;
+    return (static_cast<double>(m_resolvedCount) / m_totalIncidents) * 100.0;
+}
+
+void AnalyticsEngine::reset() {
+    m_totalIncidents = 0;
+    m_dispatchedCount = 0;
+    m_resolvedCount = 0;
+    m_preemptionCount = 0;
+    m_rerouteCount = 0;
+    m_totalDistanceTraveledKm = 0.0;
+    m_sumEtaMinutes = 0.0;
+    m_etaSampleCount = 0;
+    m_sumDurationMinutes = 0.0;
+    m_events.clear();
+}
+
+std::string AnalyticsEngine::toJson() const {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2);
+    oss << "{\"totalIncidents\":" << m_totalIncidents << ","
+        << "\"dispatchedCount\":" << m_dispatchedCount << ","
+        << "\"resolvedCount\":" << m_resolvedCount << ","
+        << "\"preemptionCount\":" << m_preemptionCount << ","
+        << "\"rerouteCount\":" << m_rerouteCount << ","
+        << "\"totalDistanceTraveledKm\":" << m_totalDistanceTraveledKm << ","
+        << "\"meanEtaMinutes\":" << getMeanEtaMinutes() << ","
+        << "\"successRatePercent\":" << getSuccessRatePercent() << ","
+        << "\"events\":[";
+    for (size_t i = 0; i < m_events.size(); ++i) {
+        if (i > 0) oss << ",";
+        const auto& ev = m_events[i];
+        oss << "{\"timestamp\":" << ev.timestamp << ","
+            << "\"type\":\"" << ev.type << "\","
+            << "\"incidentId\":\"" << ev.incidentId << "\","
+            << "\"vehicleId\":\"" << ev.vehicleId << "\","
+            << "\"message\":\"" << ev.message << "\"}";
+    }
+    oss << "]}";
+    return oss.str();
 }
