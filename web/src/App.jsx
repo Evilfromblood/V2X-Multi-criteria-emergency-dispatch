@@ -235,6 +235,42 @@ export default function App() {
     setActiveTab('hazards');
   }, []);
 
+  const handleToggleSegment = useCallback(async (segment) => {
+    if (!segment) return;
+    try {
+      if (segment.isBlocked) {
+        await fetch('/api/resolve_hazard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: segment.from, to: segment.to })
+        });
+        addToast('RESOLVED', 'ROADWAY CLEARED', `Corridor ${segment.from} ↔ ${segment.to} reopened.`);
+      } else {
+        await fetch('/api/hazard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: segment.from,
+            to: segment.to,
+            hazardType: 'ROAD_CLOSURE',
+            multiplier: 1.0,
+            isBlocked: true,
+            description: `Corridor Closure on ${segment.from} ↔ ${segment.to}`
+          })
+        });
+        addToast('REROUTE', 'ROADWAY BLOCKED', `Corridor ${segment.from} ↔ ${segment.to} closed by dispatcher.`);
+      }
+      setSelectedSegment(segment);
+      const res = await fetch('/api/state');
+      if (res.ok) {
+        const data = await res.json();
+        setTelemetry(data);
+      }
+    } catch (err) {
+      console.error('Toggle segment error', err);
+    }
+  }, [addToast]);
+
   const handleFocusVehicle = useCallback((vehicleId) => {
     setFocusedVehicleId(prev => prev === vehicleId ? null : vehicleId);
   }, []);
@@ -407,6 +443,7 @@ export default function App() {
               telemetry={telemetry}
               onMapClick={handleMapClick}
               onSelectSegment={handleSelectSegment}
+              onToggleSegment={handleToggleSegment}
               selectedSegment={selectedSegment}
               focusedVehicleId={focusedVehicleId}
               onFocusVehicle={handleFocusVehicle}

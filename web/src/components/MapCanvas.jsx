@@ -1,12 +1,13 @@
-import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 
-const PADDING = 55;
+const PADDING = 60;
 const WORLD_SIZE = 13.0; // km
 
 function MapCanvasComponent({ 
   telemetry, 
   onMapClick, 
   onSelectSegment, 
+  onToggleSegment,
   selectedSegment,
   focusedVehicleId,
   onFocusVehicle 
@@ -15,27 +16,20 @@ function MapCanvasComponent({
   const animFrameIdRef = useRef(null);
   const lastTimeRef = useRef(performance.now());
 
-  // Cached off-screen canvas for static grid, roads, and zone boundaries
+  // Cached off-screen canvas for static layer (grid, static roads, zone boundaries, node markers)
   const offscreenCanvasRef = useRef(null);
   const offscreenDirtyRef = useRef(true);
 
-  // Cached node dictionary to avoid reallocating every frame
+  // Cached node dictionary to avoid per-frame allocations
   const nodeMapRef = useRef(new Map());
 
-  // Position interpolation state for smooth movement
+  // Position interpolation map for smooth vehicle gliding
   const vehiclePosMapRef = useRef(new Map());
   const animOffsetRef = useRef(0);
 
-  // Coordinate transformation helpers
-  const getScreenCoords = useCallback((kmX, kmY, width, height) => {
-    const sx = PADDING + ((kmX - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-    const sy = height - (PADDING + ((kmY - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
-    return { sx, sy };
-  }, []);
-
   // Update node map whenever telemetry.network.nodes updates
   useEffect(() => {
-    if (telemetry && telemetry.network && telemetry.network.nodes) {
+    if (telemetry?.network?.nodes) {
       const map = nodeMapRef.current;
       map.clear();
       telemetry.network.nodes.forEach((n) => {
@@ -45,14 +39,14 @@ function MapCanvasComponent({
     }
   }, [telemetry?.network?.nodes]);
 
-  // Mark offscreen background dirty if segments or layout change
+  // Mark offscreen background dirty if segments or hazards change
   useEffect(() => {
     offscreenDirtyRef.current = true;
-  }, [telemetry?.network?.segments]);
+  }, [telemetry?.network?.segments, telemetry?.hazards]);
 
-  // 1. Off-screen Background Renderer: Render static grid, zones, and standard roads ONCE
+  // 1. LAYER 1: Pre-render static background (tactical grid, node markers, zones, static roads)
   const renderStaticBackground = useCallback((offscreenCtx, width, height) => {
-    // Fill canvas background
+    // Fill deep tactical canvas
     offscreenCtx.fillStyle = '#080c14';
     offscreenCtx.fillRect(0, 0, width, height);
 
@@ -63,37 +57,37 @@ function MapCanvasComponent({
 
     for (let x = 0; x <= width; x += gridStep) {
       offscreenCtx.beginPath();
-      offscreenCtx.moveTo(x, 0);
-      offscreenCtx.lineTo(x, height);
+      offscreenCtx.moveTo((x | 0) + 0.5, 0);
+      offscreenCtx.lineTo((x | 0) + 0.5, height);
       offscreenCtx.stroke();
     }
     for (let y = 0; y <= height; y += gridStep) {
       offscreenCtx.beginPath();
-      offscreenCtx.moveTo(0, y);
-      offscreenCtx.lineTo(width, y);
+      offscreenCtx.moveTo(0, (y | 0) + 0.5);
+      offscreenCtx.lineTo(width, (y | 0) + 0.5);
       offscreenCtx.stroke();
     }
 
-    // Coordinate tick labels on edges
+    // Coordinate tick labels on edges (integer-aligned)
     offscreenCtx.fillStyle = '#475569';
     offscreenCtx.font = '9px JetBrains Mono';
     for (let km = 1; km <= 13; km += 2) {
-      const sx = PADDING + ((km - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-      const sy = height - (PADDING + ((km - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+      const sx = (PADDING + ((km - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+      const sy = (height - (PADDING + ((km - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
       offscreenCtx.fillText(`${km}km`, sx - 10, height - 12);
       offscreenCtx.fillText(`${km}km`, 12, sy + 3);
     }
 
     const nodeMap = nodeMapRef.current;
 
-    // Tactical Zones (Hospital Trauma Perimeter & Base HQ Perimeter)
+    // Tactical Zone Callouts (Hospital Trauma Perimeter & Base HQ Perimeter)
     nodeMap.forEach((n) => {
-      const sx = PADDING + ((n.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-      const sy = height - (PADDING + ((n.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+      const sx = (PADDING + ((n.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+      const sy = (height - (PADDING + ((n.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
 
       if (n.type === 'HOSPITAL') {
         offscreenCtx.beginPath();
-        offscreenCtx.arc(sx, sy, 62, 0, Math.PI * 2);
+        offscreenCtx.arc(sx, sy, 65, 0, Math.PI * 2);
         offscreenCtx.fillStyle = 'rgba(13, 148, 136, 0.08)';
         offscreenCtx.fill();
         offscreenCtx.strokeStyle = 'rgba(20, 184, 166, 0.35)';
@@ -102,12 +96,12 @@ function MapCanvasComponent({
         offscreenCtx.stroke();
         offscreenCtx.setLineDash([]);
 
-        offscreenCtx.fillStyle = 'rgba(45, 212, 191, 0.6)';
+        offscreenCtx.fillStyle = 'rgba(45, 212, 191, 0.7)';
         offscreenCtx.font = 'bold 9px JetBrains Mono';
-        offscreenCtx.fillText('CENTRAL HOSPITAL TRAUMA ZONE', sx - 80, sy - 68);
+        offscreenCtx.fillText('CENTRAL HOSPITAL TRAUMA ZONE', sx - 85, sy - 72);
       } else if (n.type === 'STATION') {
         offscreenCtx.beginPath();
-        offscreenCtx.arc(sx, sy, 50, 0, Math.PI * 2);
+        offscreenCtx.arc(sx, sy, 52, 0, Math.PI * 2);
         offscreenCtx.fillStyle = 'rgba(37, 99, 235, 0.08)';
         offscreenCtx.fill();
         offscreenCtx.strokeStyle = 'rgba(59, 130, 246, 0.35)';
@@ -116,23 +110,23 @@ function MapCanvasComponent({
         offscreenCtx.stroke();
         offscreenCtx.setLineDash([]);
 
-        offscreenCtx.fillStyle = 'rgba(96, 165, 250, 0.6)';
+        offscreenCtx.fillStyle = 'rgba(96, 165, 250, 0.7)';
         offscreenCtx.font = 'bold 9px JetBrains Mono';
-        offscreenCtx.fillText('HQ DISPATCH DEPOT', sx - 50, sy - 56);
+        offscreenCtx.fillText('HQ DISPATCH DEPOT', sx - 54, sy - 58);
       }
     });
 
-    // Static Base Road Segments
+    // Static Base Road Segments (Free-Flow Corridor paths)
     if (telemetry?.network?.segments) {
       telemetry.network.segments.forEach((seg) => {
         const from = nodeMap.get(seg.from);
         const to = nodeMap.get(seg.to);
         if (!from || !to) return;
 
-        const x1 = PADDING + ((from.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-        const y1 = height - (PADDING + ((from.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
-        const x2 = PADDING + ((to.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-        const y2 = height - (PADDING + ((to.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+        const x1 = (PADDING + ((from.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+        const y1 = (height - (PADDING + ((from.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
+        const x2 = (PADDING + ((to.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+        const y2 = (height - (PADDING + ((to.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
 
         offscreenCtx.beginPath();
         offscreenCtx.moveTo(x1, y1);
@@ -143,10 +137,10 @@ function MapCanvasComponent({
       });
     }
 
-    // Intersections (Nodes)
+    // Intersections (Nodes) with Anti-Collision Layout
     nodeMap.forEach((n) => {
-      const sx = PADDING + ((n.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-      const sy = height - (PADDING + ((n.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+      const sx = (PADDING + ((n.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+      const sy = (height - (PADDING + ((n.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
 
       offscreenCtx.beginPath();
       if (n.type === 'HOSPITAL') {
@@ -157,6 +151,7 @@ function MapCanvasComponent({
         offscreenCtx.lineWidth = 2.5;
         offscreenCtx.stroke();
 
+        // Medical Cross
         offscreenCtx.fillStyle = '#ffffff';
         offscreenCtx.fillRect(sx - 1.5, sy - 6, 3, 12);
         offscreenCtx.fillRect(sx - 6, sy - 1.5, 12, 3);
@@ -170,7 +165,8 @@ function MapCanvasComponent({
 
         offscreenCtx.fillStyle = '#ffffff';
         offscreenCtx.font = 'bold 8px JetBrains Mono';
-        offscreenCtx.fillText('HQ', sx - 6, sy + 3);
+        offscreenCtx.textAlign = 'center';
+        offscreenCtx.fillText('HQ', sx, sy + 3);
       } else {
         offscreenCtx.arc(sx, sy, 5.5, 0, Math.PI * 2);
         offscreenCtx.fillStyle = '#1e293b';
@@ -180,13 +176,17 @@ function MapCanvasComponent({
         offscreenCtx.stroke();
       }
 
-      offscreenCtx.fillStyle = '#94a3b8';
-      offscreenCtx.font = '10px JetBrains Mono';
-      offscreenCtx.fillText(n.id, sx + 9, sy + 12);
+      // Explicit Layout Offset: Node label is anchored 14px below-left of node circle
+      // to eliminate collisions with vehicle sprites and state pills!
+      offscreenCtx.fillStyle = '#64748b';
+      offscreenCtx.font = '9px JetBrains Mono';
+      offscreenCtx.textAlign = 'right';
+      offscreenCtx.fillText(n.id, sx - 12, sy + 16);
+      offscreenCtx.textAlign = 'left';
     });
   }, [telemetry?.network]);
 
-  // 2. High-Performance Render Loop: only redraw dynamic layers at 60 FPS
+  // 2. LAYER 2: 60 FPS Dynamic Foreground Animation Loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -205,7 +205,7 @@ function MapCanvasComponent({
     const render = (now) => {
       if (!isRunning) return;
 
-      const dt = Math.min(0.1, (now - lastTimeRef.current) / 1000);
+      const dt = Math.min(0.1, (now - lastTimeRef.current) * 0.001);
       lastTimeRef.current = now;
 
       animOffsetRef.current = (animOffsetRef.current + dt * 25) % 1000;
@@ -226,7 +226,7 @@ function MapCanvasComponent({
         offscreenDirtyRef.current = false;
       }
 
-      // 1. FAST BLIT: draw pre-rendered static layer
+      // 1. FAST BLIT: Draw pre-rendered static layer in < 0.1ms
       ctx.drawImage(offscreenCanvasRef.current, 0, 0);
 
       const nodeMap = nodeMapRef.current;
@@ -236,24 +236,22 @@ function MapCanvasComponent({
         const segments = telemetry.network.segments;
         for (let i = 0; i < segments.length; ++i) {
           const seg = segments[i];
-          if (!seg.isBlocked && seg.congestionMultiplier <= 1.5 && (!selectedSegment || 
-              (selectedSegment.from !== seg.from && selectedSegment.to !== seg.to &&
-               selectedSegment.from !== seg.to && selectedSegment.to !== seg.from))) {
-            continue; // Standard road already drawn in static layer!
+          const isSelected = selectedSegment && 
+            ((selectedSegment.from === seg.from && selectedSegment.to === seg.to) ||
+             (selectedSegment.from === seg.to && selectedSegment.to === seg.from));
+
+          if (!seg.isBlocked && seg.congestionMultiplier <= 1.5 && !isSelected) {
+            continue; // Normal road already in background!
           }
 
           const from = nodeMap.get(seg.from);
           const to = nodeMap.get(seg.to);
           if (!from || !to) continue;
 
-          const x1 = PADDING + ((from.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-          const y1 = height - (PADDING + ((from.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
-          const x2 = PADDING + ((to.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-          const y2 = height - (PADDING + ((to.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
-
-          const isSelected = selectedSegment && 
-            ((selectedSegment.from === seg.from && selectedSegment.to === seg.to) ||
-             (selectedSegment.from === seg.to && selectedSegment.to === seg.from));
+          const x1 = (PADDING + ((from.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+          const y1 = (height - (PADDING + ((from.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
+          const x2 = (PADDING + ((to.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+          const y2 = (height - (PADDING + ((to.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
 
           ctx.beginPath();
           ctx.moveTo(x1, y1);
@@ -266,11 +264,12 @@ function MapCanvasComponent({
             ctx.stroke();
             ctx.setLineDash([]);
 
-            const mx = (x1 + x2) * 0.5;
-            const my = (y1 + y2) * 0.5;
+            // Exact Segment Midpoint for Blockage Octagon (Never occludes nodes)
+            const mx = ((x1 + x2) * 0.5) | 0;
+            const my = ((y1 + y2) * 0.5) | 0;
 
             ctx.beginPath();
-            ctx.arc(mx, my, 9, 0, Math.PI * 2);
+            ctx.arc(mx, my, 10, 0, Math.PI * 2);
             ctx.fillStyle = '#dc2626';
             ctx.fill();
             ctx.strokeStyle = '#fca5a5';
@@ -279,10 +278,13 @@ function MapCanvasComponent({
 
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 10px monospace';
-            ctx.fillText('✕', mx - 3, my + 3.5);
+            ctx.textAlign = 'center';
+            ctx.fillText('✕', mx, my + 3.5);
+            ctx.textAlign = 'left';
 
+            // Pulsing warning ring
             ctx.beginPath();
-            ctx.arc(mx, my, 9 + tPulse * 8, 0, Math.PI * 2);
+            ctx.arc(mx, my, 10 + tPulse * 8, 0, Math.PI * 2);
             ctx.strokeStyle = `rgba(239, 68, 68, ${1 - tPulse})`;
             ctx.lineWidth = 1.5;
             ctx.stroke();
@@ -291,15 +293,17 @@ function MapCanvasComponent({
             ctx.lineWidth = isSelected ? 6 : 3.5;
             ctx.stroke();
 
-            const mx = (x1 + x2) * 0.5;
-            const my = (y1 + y2) * 0.5;
+            const mx = ((x1 + x2) * 0.5) | 0;
+            const my = ((y1 + y2) * 0.5) | 0;
             ctx.beginPath();
-            ctx.arc(mx, my, 6, 0, Math.PI * 2);
+            ctx.arc(mx, my, 7, 0, Math.PI * 2);
             ctx.fillStyle = '#f59e0b';
             ctx.fill();
             ctx.fillStyle = '#000000';
             ctx.font = 'bold 8px JetBrains Mono';
-            ctx.fillText(`x${seg.congestionMultiplier.toFixed(1)}`, mx - 9, my - 8);
+            ctx.textAlign = 'center';
+            ctx.fillText(`x${seg.congestionMultiplier.toFixed(1)}`, mx, my + 2.5);
+            ctx.textAlign = 'left';
           } else if (isSelected) {
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 5;
@@ -322,8 +326,8 @@ function MapCanvasComponent({
             for (let p = 0; p < v.activeRoutePath.length; ++p) {
               const node = nodeMap.get(v.activeRoutePath[p]);
               if (node) {
-                const sx = PADDING + ((node.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-                const sy = height - (PADDING + ((node.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+                const sx = (PADDING + ((node.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+                const sy = (height - (PADDING + ((node.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
                 if (!started) {
                   ctx.moveTo(sx, sy);
                   started = true;
@@ -334,8 +338,8 @@ function MapCanvasComponent({
             }
 
             ctx.strokeStyle = isAmbulance 
-              ? (isFocused ? 'rgba(6, 182, 212, 0.9)' : 'rgba(6, 182, 212, 0.45)')
-              : (isFocused ? 'rgba(249, 115, 22, 0.9)' : 'rgba(249, 115, 22, 0.45)');
+              ? (isFocused ? 'rgba(6, 182, 212, 0.95)' : 'rgba(6, 182, 212, 0.5)')
+              : (isFocused ? 'rgba(249, 115, 22, 0.95)' : 'rgba(249, 115, 22, 0.5)');
             ctx.lineWidth = isFocused ? 5 : 3.5;
             ctx.setLineDash([8, 8]);
             ctx.lineDashOffset = -animOffsetRef.current * 0.8;
@@ -347,17 +351,18 @@ function MapCanvasComponent({
         }
       }
 
-      // 4. Dynamic Active Emergency Incidents
+      // 4. Dynamic Active Emergency Incidents (Radar Rings)
       if (telemetry?.incidents) {
         const incidents = telemetry.incidents;
         for (let i = 0; i < incidents.length; ++i) {
           const inc = incidents[i];
           if (inc.status === 'RESOLVED') continue;
 
-          const ix = PADDING + ((inc.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-          const iy = height - (PADDING + ((inc.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+          const ix = (PADDING + ((inc.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+          const iy = (height - (PADDING + ((inc.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
           const isHighSeverity = inc.severity >= 4;
 
+          // Expanding Outer Radar Wave
           const pulseRadius = 15 + tPulse * 30;
           ctx.beginPath();
           ctx.arc(ix, iy, pulseRadius, 0, Math.PI * 2);
@@ -376,6 +381,7 @@ function MapCanvasComponent({
             ctx.stroke();
           }
 
+          // Diamond Beacon
           ctx.save();
           ctx.translate(ix, iy);
           ctx.rotate(Math.PI / 4);
@@ -388,10 +394,13 @@ function MapCanvasComponent({
 
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 9px JetBrains Mono';
-          ctx.fillText(`L${inc.severity}`, ix - 6, iy + 3.5);
+          ctx.textAlign = 'center';
+          ctx.fillText(`L${inc.severity}`, ix, iy + 3.5);
 
+          // Tactical callout badge
+          ctx.textAlign = 'left';
           ctx.fillStyle = '#f8fafc';
-          ctx.font = 'bold 11px Plus Jakarta Sans';
+          ctx.font = 'bold 10px Plus Jakarta Sans';
           ctx.fillText(inc.id, ix + 16, iy - 4);
           ctx.fillStyle = isHighSeverity ? '#fca5a5' : '#fde68a';
           ctx.font = '9px JetBrains Mono';
@@ -399,12 +408,22 @@ function MapCanvasComponent({
         }
       }
 
-      // 5. Dynamic Fleet Movement with Frame-Rate Independent Exponential Smoothing
+      // 5. Multi-Vehicle Collision Avoidance & Distinct Sprites (Ambulance vs Fire Engine)
       if (telemetry?.fleet) {
         const fleet = telemetry.fleet;
         const posMap = vehiclePosMapRef.current;
-        // Exponential smoothing factor: 1 - exp(-k * dt)
         const factor = 1 - Math.exp(-9 * dt);
+
+        // Group vehicles by approximate location to calculate horizontal layout offsets
+        const clusterMap = new Map();
+        for (let i = 0; i < fleet.length; ++i) {
+          const v = fleet[i];
+          const clusterKey = `${Math.round(v.x * 2)}_${Math.round(v.y * 2)}`;
+          if (!clusterMap.has(clusterKey)) {
+            clusterMap.set(clusterKey, []);
+          }
+          clusterMap.get(clusterKey).push(v.id);
+        }
 
         for (let i = 0; i < fleet.length; ++i) {
           const v = fleet[i];
@@ -427,14 +446,25 @@ function MapCanvasComponent({
             }
           }
 
-          const vx = PADDING + ((currentPos.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-          const vy = height - (PADDING + ((currentPos.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+          // Calculate cluster offset so vehicles at same node never overlap!
+          const clusterKey = `${Math.round(v.x * 2)}_${Math.round(v.y * 2)}`;
+          const clusterMembers = clusterMap.get(clusterKey) || [v.id];
+          const clusterIdx = clusterMembers.indexOf(v.id);
+          const clusterTotal = clusterMembers.length;
+          const clusterOffsetX = clusterTotal > 1 ? (clusterIdx - (clusterTotal - 1) * 0.5) * 22 : 0;
+          const clusterOffsetY = v.state === 'IDLE_STATION' ? -20 : 0;
+
+          const baseScreenX = PADDING + ((currentPos.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
+          const baseScreenY = height - (PADDING + ((currentPos.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+
+          const vx = (baseScreenX + clusterOffsetX) | 0;
+          const vy = (baseScreenY + clusterOffsetY) | 0;
 
           const isAmbulance = v.type === 'AMBULANCE';
           const isOnScene = v.state === 'ON_SCENE';
           const isFocused = focusedVehicleId === v.id;
 
-          // Focus indicator ring & reticle
+          // Focus indicator ring & crosshair reticle
           if (isFocused) {
             ctx.beginPath();
             ctx.arc(vx, vy, 22 + tPulse * 8, 0, Math.PI * 2);
@@ -448,7 +478,7 @@ function MapCanvasComponent({
             ctx.lineWidth = 1.5;
             ctx.stroke();
 
-            // Crosshair ticks
+            // Crosshair reticle ticks
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 1.5;
             ctx.beginPath();
@@ -461,7 +491,7 @@ function MapCanvasComponent({
 
           // Ambient Glow
           ctx.beginPath();
-          ctx.arc(vx, vy, isOnScene ? 15 : 12, 0, Math.PI * 2);
+          ctx.arc(vx, vy, isOnScene ? 16 : 13, 0, Math.PI * 2);
           ctx.fillStyle = isOnScene 
             ? 'rgba(239, 68, 68, 0.45)' 
             : isAmbulance 
@@ -469,53 +499,116 @@ function MapCanvasComponent({
               : 'rgba(249, 115, 22, 0.35)';
           ctx.fill();
 
-          // Core Badge
-          ctx.beginPath();
-          ctx.arc(vx, vy, 8, 0, Math.PI * 2);
-          ctx.fillStyle = isAmbulance ? '#06b6d4' : '#ea580c';
-          ctx.fill();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 2;
-          ctx.stroke();
+          // DISTINCT SPRITE RENDERING
+          if (isAmbulance) {
+            // Ambulance: Cyan/Emerald Shield Circle with Medical Cross [+]
+            ctx.beginPath();
+            ctx.arc(vx, vy, 9, 0, Math.PI * 2);
+            ctx.fillStyle = '#06b6d4';
+            ctx.fill();
+            ctx.strokeStyle = '#e0f2fe';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
 
-          // Directional Heading Indicator
+            // Medical Cross [+]
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(vx - 1.5, vy - 5, 3, 10);
+            ctx.fillRect(vx - 5, vy - 1.5, 10, 3);
+          } else {
+            // Fire Engine: Amber/Red Rounded Box with Heavy Border & [F] Glyph
+            ctx.fillStyle = '#ea580c';
+            ctx.beginPath();
+            const r = 3;
+            const x = vx - 9;
+            const y = vy - 9;
+            const w = 18;
+            const h = 18;
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r);
+            ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#fed7aa';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Fire Engine Flame [F] Glyph
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 10px JetBrains Mono';
+            ctx.textAlign = 'center';
+            ctx.fillText('F', vx, vy + 3.5);
+          }
+
+          // Directional Heading Indicator (Pointing along vector to waypoint)
           if (v.state === 'EN_ROUTE_INCIDENT' || v.state === 'TRANSPORTING_HOSPITAL' || v.state === 'RETURNING_TO_BASE') {
             const headingScreen = -currentPos.heading;
-            const arrowDist = 13;
-            const ax = vx + Math.cos(headingScreen) * arrowDist;
-            const ay = vy + Math.sin(headingScreen) * arrowDist;
+            const arrowDist = 15;
+            const ax = (vx + Math.cos(headingScreen) * arrowDist) | 0;
+            const ay = (vy + Math.sin(headingScreen) * arrowDist) | 0;
 
             ctx.beginPath();
             ctx.moveTo(ax, ay);
             ctx.lineTo(
-              ax - Math.cos(headingScreen - 0.4) * 6,
-              ay - Math.sin(headingScreen - 0.4) * 6
+              (ax - Math.cos(headingScreen - 0.45) * 7) | 0,
+              (ay - Math.sin(headingScreen - 0.45) * 7) | 0
             );
             ctx.lineTo(
-              ax - Math.cos(headingScreen + 0.4) * 6,
-              ay - Math.sin(headingScreen + 0.4) * 6
+              (ax - Math.cos(headingScreen + 0.45) * 7) | 0,
+              (ay - Math.sin(headingScreen + 0.45) * 7) | 0
             );
             ctx.closePath();
             ctx.fillStyle = isAmbulance ? '#22d3ee' : '#fb923c';
             ctx.fill();
           }
 
-          // ID Tag
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 10px JetBrains Mono';
-          ctx.fillText(v.id, vx + 12, vy - 2);
+          // STATE PILL BADGE: Rendered 14px ABOVE the vehicle sprite with background box
+          const stateText = v.state === 'IDLE_STATION' ? 'IDLE' :
+                            v.state === 'EN_ROUTE_INCIDENT' ? 'EN ROUTE' :
+                            v.state === 'ON_SCENE' ? `SCENE ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
+                            v.state === 'TRANSPORTING_HOSPITAL' ? 'TRANS' :
+                            v.state === 'AT_HOSPITAL_TURNOVER' ? `TURNOVER ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
+                            v.state === 'RETURNING_TO_BASE' ? 'RTB' : v.state;
 
-          // State Pill
-          let stateColor = '#94a3b8';
-          if (v.state === 'ON_SCENE') stateColor = '#f87171';
-          else if (v.state === 'EN_ROUTE_INCIDENT') stateColor = '#38bdf8';
-          else if (v.state === 'TRANSPORTING_HOSPITAL') stateColor = '#c084fc';
-          else if (v.state === 'RETURNING_TO_BASE') stateColor = '#2dd4bf';
-          else if (v.state === 'IDLE_STATION') stateColor = '#34d399';
+          let badgeBorderColor = 'rgba(16, 185, 129, 0.4)';
+          let badgeTextColor = '#34d399';
+          if (v.state === 'ON_SCENE') {
+            badgeBorderColor = 'rgba(239, 68, 68, 0.5)';
+            badgeTextColor = '#f87171';
+          } else if (v.state === 'EN_ROUTE_INCIDENT') {
+            badgeBorderColor = 'rgba(56, 189, 248, 0.5)';
+            badgeTextColor = '#38bdf8';
+          } else if (v.state === 'TRANSPORTING_HOSPITAL') {
+            badgeBorderColor = 'rgba(192, 132, 252, 0.5)';
+            badgeTextColor = '#c084fc';
+          } else if (v.state === 'RETURNING_TO_BASE') {
+            badgeBorderColor = 'rgba(45, 212, 191, 0.5)';
+            badgeTextColor = '#2dd4bf';
+          }
 
-          ctx.fillStyle = stateColor;
-          ctx.font = '8px Plus Jakarta Sans';
-          ctx.fillText(v.state, vx + 12, vy + 9);
+          ctx.font = '8px JetBrains Mono';
+          const textWidth = ctx.measureText(stateText).width;
+          const pillW = (textWidth + 6) | 0;
+          const pillH = 12;
+          const pillX = (vx - pillW * 0.5) | 0;
+          const pillY = (vy - 23) | 0;
+
+          ctx.fillStyle = 'rgba(11, 17, 32, 0.88)';
+          ctx.fillRect(pillX, pillY, pillW, pillH);
+          ctx.strokeStyle = badgeBorderColor;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(pillX, pillY, pillW, pillH);
+
+          ctx.fillStyle = badgeTextColor;
+          ctx.textAlign = 'center';
+          ctx.fillText(stateText, vx, pillY + 9);
+
+          // VEHICLE ID TAG: Rendered cleanly 15px BELOW the vehicle icon
+          ctx.fillStyle = '#f8fafc';
+          ctx.font = 'bold 9px JetBrains Mono';
+          ctx.fillText(v.id, vx, vy + 18);
+          ctx.textAlign = 'left';
         }
       }
 
@@ -551,10 +644,10 @@ function MapCanvasComponent({
     // 1. Check if clicked a vehicle
     if (telemetry.fleet && onFocusVehicle) {
       for (const v of telemetry.fleet) {
-        const vx = PADDING + ((v.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-        const vy = height - (PADDING + ((v.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+        const vx = (PADDING + ((v.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+        const vy = (height - (PADDING + ((v.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
         const dist = Math.hypot(px - vx, py - vy);
-        if (dist <= 18) {
+        if (dist <= 20) {
           onFocusVehicle(v.id);
           return;
         }
@@ -566,7 +659,7 @@ function MapCanvasComponent({
     const segments = telemetry.network.segments || [];
 
     let clickedSegment = null;
-    let minSegDist = 16;
+    let minSegDist = 18;
 
     for (let i = 0; i < segments.length; ++i) {
       const seg = segments[i];
@@ -574,10 +667,10 @@ function MapCanvasComponent({
       const to = nodeMap.get(seg.to);
       if (!from || !to) continue;
 
-      const x1 = PADDING + ((from.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-      const y1 = height - (PADDING + ((from.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
-      const x2 = PADDING + ((to.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
-      const y2 = height - (PADDING + ((to.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+      const x1 = (PADDING + ((from.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+      const y1 = (height - (PADDING + ((from.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
+      const x2 = (PADDING + ((to.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+      const y2 = (height - (PADDING + ((to.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
 
       const dx = x2 - x1;
       const dy = y2 - y1;
@@ -594,8 +687,13 @@ function MapCanvasComponent({
       }
     }
 
-    if (clickedSegment && onSelectSegment) {
-      onSelectSegment(clickedSegment);
+    if (clickedSegment) {
+      // Toggle hazard immediately if onToggleSegment is provided, or select it
+      if (onToggleSegment) {
+        onToggleSegment(clickedSegment);
+      } else if (onSelectSegment) {
+        onSelectSegment(clickedSegment);
+      }
       return;
     }
 
@@ -626,7 +724,7 @@ function MapCanvasComponent({
       <div 
         className="absolute top-3 left-3 px-3 py-2 rounded-lg text-xs font-mono flex flex-wrap gap-4 items-center pointer-events-none"
         style={{
-          background: 'rgba(9, 13, 22, 0.85)',
+          background: 'rgba(9, 13, 22, 0.88)',
           backdropFilter: 'blur(12px)',
           border: '1px solid rgba(51, 65, 85, 0.7)'
         }}
@@ -636,7 +734,7 @@ function MapCanvasComponent({
           <span className="text-slate-300">Ambulance (ALS/BLS)</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
+          <span className="w-2.5 h-2.5 rounded-sm bg-orange-500"></span>
           <span className="text-slate-300">Fire Engine (Pumper/Aerial)</span>
         </div>
         <div className="flex items-center gap-1.5">
