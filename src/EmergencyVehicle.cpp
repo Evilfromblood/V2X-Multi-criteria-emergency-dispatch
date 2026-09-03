@@ -19,6 +19,7 @@ std::string vehicleStateToString(VehicleState state) {
         case VehicleState::REFUELING_DEPOT: return "REFUELING_DEPOT";
         case VehicleState::REPLENISHING_WATER: return "REPLENISHING_WATER";
         case VehicleState::SEEKING_RESUPPLY: return "SEEKING_RESUPPLY";
+        case VehicleState::STAGED_AT_PERIMETER: return "STAGED_AT_PERIMETER";
         default: return "UNKNOWN";
     }
 }
@@ -33,6 +34,7 @@ VehicleState stringToVehicleState(const std::string& stateStr) {
     if (stateStr == "REFUELING_DEPOT") return VehicleState::REFUELING_DEPOT;
     if (stateStr == "REPLENISHING_WATER") return VehicleState::REPLENISHING_WATER;
     if (stateStr == "SEEKING_RESUPPLY") return VehicleState::SEEKING_RESUPPLY;
+    if (stateStr == "STAGED_AT_PERIMETER") return VehicleState::STAGED_AT_PERIMETER;
     return VehicleState::IDLE_STATION;
 }
 
@@ -54,7 +56,8 @@ bool EmergencyVehicle::isAvailableForDispatch() const {
     if (isLowFuel() || isLowWater()) return false;
     if (m_state == VehicleState::REFUELING_DEPOT || 
         m_state == VehicleState::REPLENISHING_WATER || 
-        m_state == VehicleState::SEEKING_RESUPPLY) {
+        m_state == VehicleState::SEEKING_RESUPPLY ||
+        m_state == VehicleState::STAGED_AT_PERIMETER) {
         return false;
     }
     return (m_state == VehicleState::IDLE_STATION || m_state == VehicleState::RETURNING_TO_BASE);
@@ -62,74 +65,114 @@ bool EmergencyVehicle::isAvailableForDispatch() const {
 
 std::string EmergencyVehicle::getResupplyStatus() const {
     if (m_state == VehicleState::REFUELING_DEPOT) return "REFUELING";
-    if (m_state == VehicleState::REPLENISHING_WATER) return "REPLENISHING";
+    if (m_state == VehicleState::REPLENISHING_WATER) return "REPLENISHING_WATER";
     if (m_state == VehicleState::SEEKING_RESUPPLY) return "SEEKING_RESUPPLY";
     if (isLowFuel()) return "LOW_FUEL";
     if (isLowWater()) return "LOW_WATER";
-    return "NONE";
+    return m_resupplyStatus;
 }
 
 void EmergencyVehicle::detourToResupply(const std::string& depotNode, const RoadNetwork& network, RouteOptimizer& optimizer) {
-    m_destinationNodeId = depotNode;
     m_state = VehicleState::SEEKING_RESUPPLY;
     m_resupplyStatus = "SEEKING_RESUPPLY";
-    std::string startNode = m_currentNodeId.empty() ? network.getNearestNode(m_x, m_y) : m_currentNodeId;
-    RouteResult res = optimizer.findShortestRoute(network, startNode, depotNode);
-    if (res.reachable && !res.pathNodes.empty()) {
-        assignRoute(res.pathNodes, depotNode, VehicleState::SEEKING_RESUPPLY);
-    } else {
-        const Intersection* node = network.getNode(depotNode);
-        if (node) {
-            m_x = node->x;
-            m_y = node->y;
-        }
-        m_currentNodeId = depotNode;
-        if (isLowWater()) startWaterReplenishment();
-        else startRefueling();
+    m_destinationNodeId = depotNode;
+
+    std::string start = m_currentNodeId;
+    if (start.empty()) start = network.getNearestNode(m_x, m_y);
+
+    RouteResult route = optimizer.findShortestRoute(network, start, depotNode);
+    if (route.reachable) {
+        assignRoute(route.pathNodes, depotNode, VehicleState::SEEKING_RESUPPLY);
     }
 }
 
 void EmergencyVehicle::setAssignedIncident(const std::string& incidentId, int severity) {
     m_assignedIncidentId = incidentId;
-    m_assignedIncidentSeverity = (severity < 1) ? 1 : ((severity > 5) ? 5 : severity);
-}
-
-void EmergencyVehicle::assignRoute(const std::vector<std::string>& path, 
-                                  const std::string& destNode, 
-                                  VehicleState newState) {
-    m_activeRoutePath = path;
-    m_destinationNodeId = destNode;
-    m_state = newState;
-    m_routeIndex = 0;
-    m_progressOnSegmentKm = 0.0;
-    if (!path.empty()) {
-        m_currentNodeId = path[0];
+    m_assignedIncidentSeverity = severity;
+    if (incidentId.empty()) {
+        clearStaging();
     }
 }
 
-bool EmergencyVehicle::rerouteTo(const std::string& destNode, const RoadNetwork& network, 
-                                RouteOptimizer& optimizer) {
+void EmergencyVehicle::assignRoute(const std::vector<std::string>& path, const std::string& destNode, VehicleState newState) {
+    m_activeRoutePath = path;
+    m_routeIndex = 0;
+    m_progressOnSegmentKm = 0.0;
+    m_destinationNodeId = destNode;
+    m_state = newState;
+}
+
+bool EmergencyVehicle::rerouteTo(const std::string& destNode, const RoadNetwork& network, RouteOptimizer& optimizer) {
     std::string startNode = m_currentNodeId;
     if (startNode.empty()) {
         startNode = network.getNearestNode(m_x, m_y);
     }
-    RouteResult res = optimizer.findShortestRoute(network, startNode, destNode);
-    if (res.reachable && !res.pathNodes.empty()) {
-        assignRoute(res.pathNodes, destNode, m_state);
+
+    RouteResult route = optimizer.findShortestRoute(network, startNode, destNode);
+    if (route.reachable) {
+        assignRoute(route.pathNodes, destNode, m_state);
         return true;
     }
     return false;
 }
 
+bool EmergencyVehicle::checkAndRerouteIfBlocked(const RoadNetwork& network, RouteOptimizer& optimizer) {
+    if (m_activeRoutePath.empty() || m_routeIndex + 1 >= m_activeRoutePath.size()) {
+        return false;
+    }
+
+    // Check if any upcoming segment on current active route is blocked
+    bool blockedAhead = false;
+    for (size_t i = m_routeIndex; i + 1 < m_activeRoutePath.size(); ++i) {
+        const RoadSegment* seg = network.getSegment(m_activeRoutePath[i], m_activeRoutePath[i + 1]);
+        if (seg && seg->isBlocked) {
+            blockedAhead = true;
+            break;
+        }
+    }
+
+    if (!blockedAhead) {
+        return false;
+    }
+
+    // Reroute from next accessible node
+    std::string start = m_activeRoutePath[m_routeIndex];
+    RouteResult newRoute = optimizer.findShortestRoute(network, start, m_destinationNodeId);
+    if (newRoute.reachable) {
+        assignRoute(newRoute.pathNodes, m_destinationNodeId, m_state);
+        return true;
+    }
+
+    // If direct destination is unreachable and vehicle is en route to an incident, attempt perimeter staging route
+    if (m_state == VehicleState::EN_ROUTE_INCIDENT && !m_assignedIncidentId.empty()) {
+        const Intersection* destInter = network.getNode(m_destinationNodeId);
+        double targetX = destInter ? destInter->x : m_x;
+        double targetY = destInter ? destInter->y : m_y;
+        PerimeterRouteResult pRoute = optimizer.findPerimeterStagingRoute(network, start, m_destinationNodeId, targetX, targetY);
+        if (pRoute.stagingFeasible && !pRoute.stagingNodeId.empty() && pRoute.stagingNodeId != start) {
+            setStagingTarget(m_assignedIncidentId, pRoute.stagingNodeId, pRoute.straightLineDistanceToTargetKm);
+            assignRoute(pRoute.pathNodes, pRoute.stagingNodeId, VehicleState::EN_ROUTE_INCIDENT);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void EmergencyVehicle::recallToBase(const RoadNetwork& network, RouteOptimizer& optimizer) {
-    if (m_state == VehicleState::IDLE_STATION) return;
-    m_destinationNodeId = m_homeBaseNode;
     m_assignedIncidentId = "";
-    m_stateTimerMinutes = 0.0;
-    std::string startNode = m_currentNodeId.empty() ? network.getNearestNode(m_x, m_y) : m_currentNodeId;
-    RouteResult res = optimizer.findShortestRoute(network, startNode, m_homeBaseNode);
-    if (res.reachable && !res.pathNodes.empty()) {
-        assignRoute(res.pathNodes, m_homeBaseNode, VehicleState::RETURNING_TO_BASE);
+    m_assignedIncidentSeverity = 1;
+    clearStaging();
+    m_destinationNodeId = m_homeBaseNode;
+
+    std::string start = m_currentNodeId;
+    if (start.empty()) {
+        start = network.getNearestNode(m_x, m_y);
+    }
+
+    RouteResult route = optimizer.findShortestRoute(network, start, m_homeBaseNode);
+    if (route.reachable) {
+        assignRoute(route.pathNodes, m_homeBaseNode, VehicleState::RETURNING_TO_BASE);
     } else {
         m_state = VehicleState::IDLE_STATION;
         const Intersection* base = network.getNode(m_homeBaseNode);
@@ -140,63 +183,24 @@ void EmergencyVehicle::recallToBase(const RoadNetwork& network, RouteOptimizer& 
     }
 }
 
-bool EmergencyVehicle::checkAndRerouteIfBlocked(const RoadNetwork& network, RouteOptimizer& optimizer) {
-    if (m_state != VehicleState::EN_ROUTE_INCIDENT && 
-        m_state != VehicleState::TRANSPORTING_HOSPITAL && 
-        m_state != VehicleState::RETURNING_TO_BASE) {
-        return false;
-    }
-
-    if (m_activeRoutePath.empty() || m_routeIndex + 1 >= m_activeRoutePath.size()) {
-        return false;
-    }
-
-    // Check if any remaining segment is blocked
-    bool blockedFound = false;
-    for (size_t i = m_routeIndex; i + 1 < m_activeRoutePath.size(); ++i) {
-        const RoadSegment* seg = network.getSegment(m_activeRoutePath[i], m_activeRoutePath[i+1]);
-        if (seg && seg->isBlocked) {
-            blockedFound = true;
-            break;
-        }
-    }
-
-    if (!blockedFound) {
-        return false;
-    }
-
-    // Attempt to reroute from current node
-    std::string startNode = m_currentNodeId;
-    if (startNode.empty()) {
-        startNode = network.getNearestNode(m_x, m_y);
-    }
-    RouteResult alt = optimizer.findShortestRoute(network, startNode, m_destinationNodeId);
-    if (alt.reachable && !alt.pathNodes.empty()) {
-        assignRoute(alt.pathNodes, m_destinationNodeId, m_state);
-        return true;
-    }
-    return false;
-}
-
-void EmergencyVehicle::advanceSimulationTime(double deltaMinutes, const RoadNetwork& network, 
-                                            RouteOptimizer& optimizer) {
+void EmergencyVehicle::advanceSimulationTime(double deltaMinutes, const RoadNetwork& network, RouteOptimizer& optimizer) {
     if (m_state == VehicleState::IDLE_STATION) {
-        if (isLowFuel()) {
-            detourToResupply(m_homeBaseNode, network, optimizer);
-        }
         return;
     }
 
-    if (m_state == VehicleState::REFUELING_DEPOT || m_state == VehicleState::REPLENISHING_WATER) {
-        m_stateTimerMinutes -= deltaMinutes;
-        if (m_stateTimerMinutes <= 0.0) {
-            m_stateTimerMinutes = 0.0;
-            onStateTimerExpired(network, optimizer);
-        }
+    // Holding at Perimeter Staging
+    if (m_state == VehicleState::STAGED_AT_PERIMETER) {
+        // Idle burn while holding at perimeter staging: 0.05 L/min
+        burnFuel(0.05 * deltaMinutes);
         return;
     }
 
-    if (m_state == VehicleState::ON_SCENE || m_state == VehicleState::AT_HOSPITAL_TURNOVER) {
+    // Timed stationary states: ON_SCENE, AT_HOSPITAL_TURNOVER, REFUELING_DEPOT, REPLENISHING_WATER
+    if (m_state == VehicleState::ON_SCENE || 
+        m_state == VehicleState::AT_HOSPITAL_TURNOVER ||
+        m_state == VehicleState::REFUELING_DEPOT ||
+        m_state == VehicleState::REPLENISHING_WATER) {
+
         // Idle scene burn rate: 0.05 L/min
         burnFuel(0.05 * deltaMinutes);
 
@@ -310,6 +314,19 @@ void EmergencyVehicle::advanceSimulationTime(double deltaMinutes, const RoadNetw
 
 void EmergencyVehicle::onArrivedAtDestination(const RoadNetwork& network, RouteOptimizer& optimizer) {
     if (m_state == VehicleState::EN_ROUTE_INCIDENT) {
+        // Check if arrived at a perimeter staging node rather than incident scene
+        if (!m_perimeterStagingNodeId.empty() && m_destinationNodeId == m_perimeterStagingNodeId) {
+            m_state = VehicleState::STAGED_AT_PERIMETER;
+            m_isStagedAtPerimeter = true;
+            m_currentNodeId = m_destinationNodeId;
+            const Intersection* node = network.getNode(m_destinationNodeId);
+            if (node) {
+                m_x = node->x;
+                m_y = node->y;
+            }
+            return;
+        }
+
         m_state = VehicleState::ON_SCENE;
         m_stateTimerMinutes = (m_savedSceneTimerMinutes > 0.0) ? m_savedSceneTimerMinutes : (m_assignedIncidentSeverity * 5.0);
         m_savedSceneTimerMinutes = 0.0;
@@ -332,6 +349,7 @@ void EmergencyVehicle::onArrivedAtDestination(const RoadNetwork& network, RouteO
         }
     } else if (m_state == VehicleState::RETURNING_TO_BASE) {
         m_assignedIncidentId = "";
+        clearStaging();
         m_destinationNodeId = m_homeBaseNode;
         m_currentNodeId = m_homeBaseNode;
         const Intersection* base = network.getNode(m_homeBaseNode);
@@ -352,6 +370,7 @@ void EmergencyVehicle::onStateTimerExpired(const RoadNetwork& network, RouteOpti
         // Default behavior: return to base
         m_state = VehicleState::RETURNING_TO_BASE;
         m_destinationNodeId = m_homeBaseNode;
+        clearStaging();
         RouteResult route = optimizer.findShortestRoute(network, m_currentNodeId, m_homeBaseNode);
         if (route.reachable) {
             assignRoute(route.pathNodes, m_homeBaseNode, VehicleState::RETURNING_TO_BASE);
@@ -387,6 +406,9 @@ std::string EmergencyVehicle::toJson() const {
         << "\"maxFuelLiters\":" << m_maxFuelLiters << ","
         << "\"fuelPercentage\":" << getFuelPercentage() << ","
         << "\"resupplyStatus\":\"" << getResupplyStatus() << "\","
+        << "\"isStagedAtPerimeter\":" << (isStagedAtPerimeter() ? "true" : "false") << ","
+        << "\"perimeterStagingNodeId\":\"" << m_perimeterStagingNodeId << "\","
+        << "\"stagingDistanceKm\":" << m_stagingDistanceKm << ","
         << "\"waterPercentage\":" << (m_type == "FIRE_ENGINE" ? std::to_string(getWaterPercentage()) : "null") << ","
         << "\"currentWaterLiters\":" << (m_type == "FIRE_ENGINE" ? std::to_string(getCurrentWaterLiters()) : "null") << ","
         << "\"activeRoutePath\":[";

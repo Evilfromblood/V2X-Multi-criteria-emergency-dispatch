@@ -18,7 +18,8 @@ enum class VehicleState {
     RETURNING_TO_BASE,
     REFUELING_DEPOT,
     REPLENISHING_WATER,
-    SEEKING_RESUPPLY
+    SEEKING_RESUPPLY,
+    STAGED_AT_PERIMETER
 };
 
 std::string vehicleStateToString(VehicleState state);
@@ -52,6 +53,24 @@ public:
     void setAssignedIncident(const std::string& incidentId, int severity);
     int getAssignedIncidentSeverity() const { return m_assignedIncidentSeverity; }
     double getTotalDistanceTraveledKm() const { return m_totalDistanceTraveledKm; }
+
+    // Perimeter Staging & Partial-Route Tracking
+    bool isStagedAtPerimeter() const { return m_state == VehicleState::STAGED_AT_PERIMETER || m_isStagedAtPerimeter; }
+    std::string getPerimeterStagingNodeId() const { return m_perimeterStagingNodeId; }
+    std::string getStagedTargetIncidentId() const { return m_stagedTargetIncidentId; }
+    double getStagingDistanceKm() const { return m_stagingDistanceKm; }
+    void setStagingTarget(const std::string& incidentId, const std::string& stagingNode, double gapKm) {
+        m_isStagedAtPerimeter = false;
+        m_stagedTargetIncidentId = incidentId;
+        m_perimeterStagingNodeId = stagingNode;
+        m_stagingDistanceKm = gapKm;
+    }
+    void clearStaging() {
+        m_isStagedAtPerimeter = false;
+        m_stagedTargetIncidentId = "";
+        m_perimeterStagingNodeId = "";
+        m_stagingDistanceKm = 0.0;
+    }
 
     // Consumable Resource Dynamics & Refueling
     double getCurrentFuelLiters() const { return m_currentFuelLiters; }
@@ -119,6 +138,12 @@ protected:
     std::string m_assignedIncidentId;
     int m_assignedIncidentSeverity = 1;
     double m_totalDistanceTraveledKm = 0.0;
+
+    // Perimeter Staging State
+    bool m_isStagedAtPerimeter = false;
+    std::string m_perimeterStagingNodeId;
+    std::string m_stagedTargetIncidentId;
+    double m_stagingDistanceKm = 0.0;
 
     // Resource tracking
     double m_maxFuelLiters = 80.0;

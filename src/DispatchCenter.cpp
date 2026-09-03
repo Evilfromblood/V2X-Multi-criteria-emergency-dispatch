@@ -199,8 +199,158 @@ bool DispatchCenter::attemptDispatch(Incident& incident, bool canPreempt) {
         }
     }
 
+    // Isolated or Blocked Corridor: Attempt Perimeter Staging & Partial-Route Dispatch
+    if (attemptPerimeterStagingDispatch(incident)) {
+        return true;
+    }
+
     incident.setStatus("PENDING");
     return false;
+}
+
+bool DispatchCenter::attemptPerimeterStagingDispatch(Incident& incident) {
+    int reqAmb = incident.getRequiredAmbulances();
+    int reqEng = incident.getRequiredFireEngines();
+
+    struct StagingCandidate {
+        EmergencyVehicle* vehicle;
+        PerimeterRouteResult route;
+        double score;
+    };
+
+    std::vector<StagingCandidate> ambCandidates;
+    std::vector<StagingCandidate> engCandidates;
+
+    for (auto& v : m_fleet) {
+        if (!v->isAvailableForDispatch()) continue;
+
+        std::string startNode = v->getCurrentNodeId();
+        if (startNode.empty()) startNode = m_network.getNearestNode(v->getX(), v->getY());
+
+        PerimeterRouteResult pr = m_optimizer.findPerimeterStagingRoute(
+            m_network, startNode, incident.getNearestNodeId(), incident.getX(), incident.getY()
+        );
+
+        if (!pr.stagingFeasible || pr.stagingNodeId.empty() || pr.pathNodes.empty()) {
+            continue;
+        }
+
+        // Score: favor closer staging perimeter node (smaller remaining gap) and lower transit time
+        double score = 1000.0 - (pr.straightLineDistanceToTargetKm * 50.0) - (pr.travelTimeToStagingMinutes * 5.0);
+
+        if (v->getType() == "AMBULANCE") {
+            ambCandidates.push_back({v.get(), pr, score});
+        } else if (v->getType() == "FIRE_ENGINE") {
+            engCandidates.push_back({v.get(), pr, score});
+        }
+    }
+
+    std::sort(ambCandidates.begin(), ambCandidates.end(), [](const StagingCandidate& a, const StagingCandidate& b) {
+        return a.score > b.score;
+    });
+    std::sort(engCandidates.begin(), engCandidates.end(), [](const StagingCandidate& a, const StagingCandidate& b) {
+        return a.score > b.score;
+    });
+
+    int dispatchedAmb = std::min(reqAmb, static_cast<int>(ambCandidates.size()));
+    int dispatchedEng = std::min(reqEng, static_cast<int>(engCandidates.size()));
+
+    if (dispatchedAmb + dispatchedEng == 0) {
+        return false;
+    }
+
+    incident.clearAssignedVehicles();
+    incident.setIsIsolated(true);
+    incident.setIsStaged(true);
+
+    std::string primeStagingNode = "";
+    double primeDistKm = 0.0;
+
+    for (int i = 0; i < dispatchedAmb; ++i) {
+        auto* amb = ambCandidates[i].vehicle;
+        const auto& pr = ambCandidates[i].route;
+        amb->setAssignedIncident(incident.getId(), incident.getSeverity());
+        amb->setStagingTarget(incident.getId(), pr.stagingNodeId, pr.straightLineDistanceToTargetKm);
+        amb->assignRoute(pr.pathNodes, pr.stagingNodeId, VehicleState::EN_ROUTE_INCIDENT);
+        incident.addAssignedVehicle(amb->getId());
+        primeStagingNode = pr.stagingNodeId;
+        primeDistKm = pr.straightLineDistanceToTargetKm;
+
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(1);
+        oss << "Dispatched " << amb->getId() << " to Perimeter Staging at " << pr.stagingNodeId
+            << " (Incident isolated, " << pr.straightLineDistanceToTargetKm << "km gap, ETA: " 
+            << pr.travelTimeToStagingMinutes << "m)";
+        m_analytics.logEvent(m_currentClockMinutes, "PERIMETER_STAGING", incident.getId(), amb->getId(), oss.str());
+    }
+
+    for (int i = 0; i < dispatchedEng; ++i) {
+        auto* eng = engCandidates[i].vehicle;
+        const auto& pr = engCandidates[i].route;
+        eng->setAssignedIncident(incident.getId(), incident.getSeverity());
+        eng->setStagingTarget(incident.getId(), pr.stagingNodeId, pr.straightLineDistanceToTargetKm);
+        eng->assignRoute(pr.pathNodes, pr.stagingNodeId, VehicleState::EN_ROUTE_INCIDENT);
+        incident.addAssignedVehicle(eng->getId());
+        if (primeStagingNode.empty()) {
+            primeStagingNode = pr.stagingNodeId;
+            primeDistKm = pr.straightLineDistanceToTargetKm;
+        }
+
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(1);
+        oss << "Dispatched " << eng->getId() << " to Perimeter Staging at " << pr.stagingNodeId
+            << " (Incident isolated, " << pr.straightLineDistanceToTargetKm << "km gap, ETA: " 
+            << pr.travelTimeToStagingMinutes << "m)";
+        m_analytics.logEvent(m_currentClockMinutes, "PERIMETER_STAGING", incident.getId(), eng->getId(), oss.str());
+    }
+
+    incident.setPerimeterStagingNodeId(primeStagingNode);
+    incident.setStagingDistanceKm(primeDistKm);
+    incident.setStatus("ISOLATED_STAGED");
+    incident.setDispatchedAtMinutes(m_currentClockMinutes);
+    m_analytics.recordPerimeterStaging();
+    return true;
+}
+
+void DispatchCenter::checkAndResumeStagedVehicles() {
+    for (auto& v : m_fleet) {
+        if (v->getState() == VehicleState::STAGED_AT_PERIMETER || 
+            (v->getState() == VehicleState::EN_ROUTE_INCIDENT && v->isStagedAtPerimeter())) {
+
+            std::string targetIncId = v->getStagedTargetIncidentId();
+            if (targetIncId.empty()) targetIncId = v->getAssignedIncidentId();
+
+            Incident* targetInc = nullptr;
+            for (auto& inc : m_incidents) {
+                if (inc.getId() == targetIncId && inc.getStatus() != "RESOLVED") {
+                    targetInc = &inc;
+                    break;
+                }
+            }
+
+            if (!targetInc) continue;
+
+            std::string startNode = v->getCurrentNodeId();
+            if (startNode.empty()) startNode = m_network.getNearestNode(v->getX(), v->getY());
+
+            RouteResult resumeRoute = m_optimizer.findShortestRoute(m_network, startNode, targetInc->getNearestNodeId());
+            if (resumeRoute.reachable && !resumeRoute.pathNodes.empty()) {
+                v->clearStaging();
+                v->assignRoute(resumeRoute.pathNodes, targetInc->getNearestNodeId(), VehicleState::EN_ROUTE_INCIDENT);
+                targetInc->setIsIsolated(false);
+                targetInc->setIsStaged(false);
+                targetInc->setStatus("DISPATCHED");
+
+                std::ostringstream oss;
+                oss << std::fixed << std::setprecision(1);
+                oss << "Corridor unblocked: " << v->getId() << " resumed transit from perimeter staging at " 
+                    << startNode << " to scene " << targetInc->getNearestNodeId() << " (ETA: " 
+                    << resumeRoute.estimatedTimeMinutes << "m)";
+                m_analytics.logEvent(m_currentClockMinutes, "STAGING_RESUMED", targetInc->getId(), v->getId(), oss.str());
+                m_analytics.recordStagingResumed();
+            }
+        }
+    }
 }
 
 bool DispatchCenter::attemptPriorityPreemption(Incident& highSeverityIncident) {
@@ -354,9 +504,15 @@ void DispatchCenter::advanceSimulationClock(double deltaMinutes) {
             } else if (newState == VehicleState::REPLENISHING_WATER) {
                 m_analytics.logEvent(m_currentClockMinutes, "WATER_REFILL", "", v->getId(),
                                      v->getId() + " connected to hydrant/tender at " + v->getCurrentNodeId() + " (3-min cycle)");
+            } else if (newState == VehicleState::STAGED_AT_PERIMETER) {
+                m_analytics.logEvent(m_currentClockMinutes, "PERIMETER_STAGING", v->getAssignedIncidentId(), v->getId(),
+                                     v->getId() + " holding at PERIMETER STAGING NODE " + v->getCurrentNodeId() + " (Awaiting corridor clearance)");
             }
         }
     }
+
+    // Check if any staged vehicles can now resume transit to their target incident
+    checkAndResumeStagedVehicles();
 
     // V2X Traffic Signal Preemption ("Green Wave Corridor")
     for (const auto& v : m_fleet) {
@@ -495,6 +651,7 @@ void DispatchCenter::checkAndRerouteFleet() {
                                  "Dynamic V2X Reroute: " + v->getId() + " detoured around hazard to " + v->getDestinationNodeId());
         }
     }
+    checkAndResumeStagedVehicles();
 }
 
 bool DispatchCenter::recallVehicle(const std::string& vehicleId) {

@@ -84,6 +84,10 @@ std::string Incident::toJson() const {
         << "\"effectivePriority\":" << m_effectivePriority << ","
         << "\"waitTimeMinutes\":" << m_waitTimeMinutes << ","
         << "\"isEscalated\":" << (m_isEscalated ? "true" : "false") << ","
+        << "\"isIsolated\":" << (m_isIsolated ? "true" : "false") << ","
+        << "\"isStaged\":" << (m_isStaged ? "true" : "false") << ","
+        << "\"perimeterStagingNodeId\":\"" << m_perimeterStagingNodeId << "\","
+        << "\"stagingDistanceKm\":" << m_stagingDistanceKm << ","
         << "\"assignedVehicles\":[";
     for (size_t i = 0; i < m_assignedVehicleIds.size(); ++i) {
         if (i > 0) oss << ",";

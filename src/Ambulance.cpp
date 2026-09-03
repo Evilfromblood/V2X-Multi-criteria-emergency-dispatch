@@ -72,6 +72,18 @@ double Ambulance::calculateSuitability(const Incident& incident, const RoadNetwo
 
 void Ambulance::onArrivedAtDestination(const RoadNetwork& network, RouteOptimizer& optimizer) {
     if (m_state == VehicleState::EN_ROUTE_INCIDENT) {
+        if (!m_perimeterStagingNodeId.empty() && m_destinationNodeId == m_perimeterStagingNodeId) {
+            m_state = VehicleState::STAGED_AT_PERIMETER;
+            m_isStagedAtPerimeter = true;
+            m_currentNodeId = m_destinationNodeId;
+            const Intersection* node = network.getNode(m_destinationNodeId);
+            if (node) {
+                m_x = node->x;
+                m_y = node->y;
+            }
+            return;
+        }
+
         m_state = VehicleState::ON_SCENE;
         m_stateTimerMinutes = m_assignedIncidentSeverity * 5.0;
         const Intersection* node = network.getNode(m_destinationNodeId);

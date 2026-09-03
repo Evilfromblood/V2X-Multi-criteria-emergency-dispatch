@@ -76,6 +76,18 @@ double FireEngine::calculateSuitability(const Incident& incident, const RoadNetw
 
 void FireEngine::onArrivedAtDestination(const RoadNetwork& network, RouteOptimizer& optimizer) {
     if (m_state == VehicleState::EN_ROUTE_INCIDENT) {
+        if (!m_perimeterStagingNodeId.empty() && m_destinationNodeId == m_perimeterStagingNodeId) {
+            m_state = VehicleState::STAGED_AT_PERIMETER;
+            m_isStagedAtPerimeter = true;
+            m_currentNodeId = m_destinationNodeId;
+            const Intersection* node = network.getNode(m_destinationNodeId);
+            if (node) {
+                m_x = node->x;
+                m_y = node->y;
+            }
+            return;
+        }
+
         m_state = VehicleState::ON_SCENE;
         m_stateTimerMinutes = (m_savedSceneTimerMinutes > 0.0) ? m_savedSceneTimerMinutes : (m_assignedIncidentSeverity * 5.0);
         m_savedSceneTimerMinutes = 0.0;

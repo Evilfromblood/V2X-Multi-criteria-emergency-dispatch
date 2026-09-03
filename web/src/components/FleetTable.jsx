@@ -11,6 +11,7 @@ const STATE_CONFIG = {
   REFUELING_DEPOT: { label: 'REFUELING', cls: 'badge-refueling', dot: '#60a5fa' },
   REPLENISHING_WATER: { label: 'WATER REFILL', cls: 'badge-water', dot: '#22d3ee' },
   SEEKING_RESUPPLY: { label: 'RESUPPLY ROUTE', cls: 'badge-resupply', dot: '#fbbf24', spin: true },
+  STAGED_AT_PERIMETER: { label: 'STAGED PERIMETER', cls: 'badge-resupply', dot: '#fbbf24', pulse: true },
   DIVERTED_CLINIC: { label: 'DIVERTING', cls: 'badge-diversion', dot: '#fca5a5' },
 };
 

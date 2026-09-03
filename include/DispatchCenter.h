@@ -27,6 +27,8 @@ public:
                                const std::string& desc = "", const std::string& customId = "");
     bool attemptDispatch(Incident& incident, bool canPreempt = true);
     bool attemptPriorityPreemption(Incident& highSeverityIncident);
+    bool attemptPerimeterStagingDispatch(Incident& incident);
+    void checkAndResumeStagedVehicles();
 
     // Fleet management
     void addVehicle(std::unique_ptr<EmergencyVehicle> vehicle);

@@ -2,9 +2,8 @@
 #include <sstream>
 #include <iomanip>
 
-void AnalyticsEngine::logEvent(double timestamp, const std::string& type, 
-                              const std::string& incidentId, const std::string& vehicleId, 
-                              const std::string& message) {
+void AnalyticsEngine::logEvent(double timestamp, const std::string& type, const std::string& incidentId,
+                               const std::string& vehicleId, const std::string& message) {
     DispatchEvent ev;
     ev.timestamp = timestamp;
     ev.type = type;
@@ -12,11 +11,6 @@ void AnalyticsEngine::logEvent(double timestamp, const std::string& type,
     ev.vehicleId = vehicleId;
     ev.message = message;
     m_events.push_back(ev);
-
-    // Limit log size to 100 recent entries
-    if (m_events.size() > 100) {
-        m_events.erase(m_events.begin());
-    }
 }
 
 void AnalyticsEngine::recordIncidentDispatched() {
@@ -63,6 +57,8 @@ void AnalyticsEngine::reset() {
     m_rerouteCount = 0;
     m_starvationEscalationCount = 0;
     m_greenWavePreemptionCount = 0;
+    m_perimeterStagingCount = 0;
+    m_stagingResumedCount = 0;
     m_totalDistanceTraveledKm = 0.0;
     m_totalFuelConsumedLiters = 0.0;
     m_totalWaterDischargedLiters = 0.0;
@@ -82,6 +78,8 @@ std::string AnalyticsEngine::toJson() const {
         << "\"rerouteCount\":" << m_rerouteCount << ","
         << "\"starvationEscalationCount\":" << m_starvationEscalationCount << ","
         << "\"greenWavePreemptionCount\":" << m_greenWavePreemptionCount << ","
+        << "\"perimeterStagingCount\":" << m_perimeterStagingCount << ","
+        << "\"stagingResumedCount\":" << m_stagingResumedCount << ","
         << "\"totalDistanceTraveledKm\":" << m_totalDistanceTraveledKm << ","
         << "\"totalFuelConsumedLiters\":" << m_totalFuelConsumedLiters << ","
         << "\"totalWaterDischargedLiters\":" << m_totalWaterDischargedLiters << ","

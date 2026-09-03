@@ -525,6 +525,55 @@ function MapCanvasComponent({
             }
           }
 
+          // Perimeter Staging Line & Checkpoint for Isolated/Blocked Calls
+          if (inc.isStaged && inc.perimeterStagingNodeId) {
+            const stageNode = nodeMap.get(inc.perimeterStagingNodeId);
+            if (stageNode && typeof stageNode.x === 'number' && typeof stageNode.y === 'number') {
+              const sx = (PADDING + ((stageNode.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+              const sy = (height - (PADDING + ((stageNode.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
+
+              // Amber dashed staging tether line
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(ix, iy);
+              ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)';
+              ctx.lineWidth = 2.0;
+              ctx.setLineDash([6, 4]);
+              ctx.stroke();
+              ctx.setLineDash([]);
+
+              // Pulsing staging checkpoint halo around staging node
+              const stagePulse = 12 + tPulse * 16;
+              ctx.beginPath();
+              ctx.arc(sx, sy, stagePulse, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(245, 158, 11, ${1.0 - tPulse})`;
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+
+              // Checkpoint Badge at midpoint
+              const smx = ((sx + ix) * 0.5) | 0;
+              const smy = ((sy + iy) * 0.5) | 0;
+              const distGap = inc.stagingDistanceKm ? inc.stagingDistanceKm.toFixed(1) : '3.0';
+              const label = `🚧 STAGING PERIMETER (${distGap}km)`;
+
+              ctx.font = 'bold 7.5px JetBrains Mono';
+              const textW = ctx.measureText(label).width;
+              const boxW = textW + 10;
+              const boxH = 14;
+
+              ctx.fillStyle = 'rgba(30, 20, 10, 0.92)';
+              ctx.fillRect(smx - boxW * 0.5, smy - 7, boxW, boxH);
+              ctx.strokeStyle = '#f59e0b';
+              ctx.lineWidth = 1.0;
+              ctx.strokeRect(smx - boxW * 0.5, smy - 7, boxW, boxH);
+
+              ctx.fillStyle = '#fbbf24';
+              ctx.textAlign = 'center';
+              ctx.fillText(label, smx, smy + 3);
+              ctx.textAlign = 'left';
+            }
+          }
+
           // Radar rings
           const pulseRadius = 14 + tPulse * 26;
           ctx.beginPath();
@@ -725,7 +774,7 @@ function MapCanvasComponent({
 
           // State Pill Badge
           const stateText = v.state === 'IDLE_STATION' ? 'IDLE' :
-                            v.state === 'EN_ROUTE_INCIDENT' ? 'EN ROUTE' :
+                            v.state === 'EN_ROUTE_INCIDENT' ? (v.isStagedAtPerimeter ? 'EN ROUTE STAGING' : 'EN ROUTE') :
                             v.state === 'ON_SCENE' ? `SCENE ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
                             v.state === 'TRANSPORTING_HOSPITAL' ? 'TRANS' :
                             v.state === 'AT_HOSPITAL_TURNOVER' ? `TURNOVER ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
@@ -733,6 +782,7 @@ function MapCanvasComponent({
                             v.state === 'REFUELING_DEPOT' ? `FUEL ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
                             v.state === 'REPLENISHING_WATER' ? `WATER ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
                             v.state === 'SEEKING_RESUPPLY' ? 'RESUPPLY' :
+                            v.state === 'STAGED_AT_PERIMETER' ? 'STAGING AT BLOCKAGE' :
                             v.state === 'DIVERTED_CLINIC' ? 'DIVERT' : v.state;
 
           let badgeBorderColor = 'rgba(16, 185, 129, 0.4)';
@@ -741,8 +791,11 @@ function MapCanvasComponent({
             badgeBorderColor = 'rgba(239, 68, 68, 0.5)';
             badgeTextColor = '#f87171';
           } else if (v.state === 'EN_ROUTE_INCIDENT') {
-            badgeBorderColor = 'rgba(56, 189, 248, 0.5)';
-            badgeTextColor = '#38bdf8';
+            badgeBorderColor = v.isStagedAtPerimeter ? 'rgba(245, 158, 11, 0.6)' : 'rgba(56, 189, 248, 0.5)';
+            badgeTextColor = v.isStagedAtPerimeter ? '#fbbf24' : '#38bdf8';
+          } else if (v.state === 'STAGED_AT_PERIMETER') {
+            badgeBorderColor = 'rgba(245, 158, 11, 0.85)';
+            badgeTextColor = '#fbbf24';
           } else if (v.state === 'TRANSPORTING_HOSPITAL') {
             badgeBorderColor = 'rgba(192, 132, 252, 0.5)';
             badgeTextColor = '#c084fc';

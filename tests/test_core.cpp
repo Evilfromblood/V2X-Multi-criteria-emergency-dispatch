@@ -322,6 +322,78 @@ void testResourceDepletionAndResupply() {
     std::cout << "  -> PASSED" << std::endl;
 }
 
+void testPerimeterStagingAndAutoResumption() {
+    std::cout << "[Test 10] Perimeter Staging & Partial-Route Dispatch for isolated incidents..." << std::endl;
+    DispatchCenter center;
+    RoadNetwork& net = center.getRoadNetwork();
+    RouteOptimizer& opt = center.getRouteOptimizer();
+
+    // 1. Isolate N29_FREIGHT_HUB by blocking both incoming corridors:
+    // (N17_LOGISTICS ↔ N29_FREIGHT_HUB and N30_NORTH_METRO ↔ N29_FREIGHT_HUB)
+    net.updateSegmentHazard("N17_LOGISTICS", "N29_FREIGHT_HUB", "ROCKSLIDE", 1.0, true);
+    net.updateSegmentHazard("N29_FREIGHT_HUB", "N17_LOGISTICS", "ROCKSLIDE", 1.0, true);
+    net.updateSegmentHazard("N30_NORTH_METRO", "N29_FREIGHT_HUB", "FLOOD", 1.0, true);
+    net.updateSegmentHazard("N29_FREIGHT_HUB", "N30_NORTH_METRO", "FLOOD", 1.0, true);
+
+    // Verify direct route is blocked
+    RouteResult direct = opt.findShortestRoute(net, "N1_HQ", "N29_FREIGHT_HUB");
+    ASSERT_TRUE(!direct.reachable, "N29_FREIGHT_HUB must be unreachable when corridors are blocked");
+
+    // Verify perimeter staging route finds closest accessible node (N17_LOGISTICS)
+    PerimeterRouteResult pRoute = opt.findPerimeterStagingRoute(net, "N1_HQ", "N29_FREIGHT_HUB", 5.0, 23.0);
+    ASSERT_TRUE(!pRoute.fullyReachable, "Must not be fully reachable");
+    ASSERT_TRUE(pRoute.stagingFeasible, "Perimeter staging must be feasible");
+    ASSERT_TRUE(pRoute.stagingNodeId == "N17_LOGISTICS", "Staging node must be closest accessible node N17_LOGISTICS");
+    ASSERT_TRUE(!pRoute.pathNodes.empty(), "Partial staging path must not be empty");
+
+    // 2. Test DispatchCenter partial-route dispatch to isolated incident
+    std::string incId = center.createIncident("FIRE", 3, 5.0, 23.0, "Isolated Freight Hub Fire", "INC-ISO-TEST");
+    const auto& incidents = center.getIncidents();
+    const Incident* createdInc = nullptr;
+    for (const auto& inc : incidents) {
+        if (inc.getId() == incId) {
+            createdInc = &inc;
+            break;
+        }
+    }
+    ASSERT_TRUE(createdInc != nullptr, "Incident must be created");
+    ASSERT_TRUE(createdInc->getStatus() == "ISOLATED_STAGED", "Incident status must be ISOLATED_STAGED");
+    ASSERT_TRUE(createdInc->isIsolated(), "Incident must have isIsolated flag set");
+    ASSERT_TRUE(createdInc->isStaged(), "Incident must have isStaged flag set");
+    ASSERT_TRUE(!createdInc->getAssignedVehicleIds().empty(), "Incident must have staged vehicle assigned");
+
+    std::string assignedVid = createdInc->getAssignedVehicleIds()[0];
+    EmergencyVehicle* v = center.getVehicleById(assignedVid);
+    ASSERT_TRUE(v != nullptr, "Assigned vehicle must exist");
+    ASSERT_TRUE(v->getState() == VehicleState::EN_ROUTE_INCIDENT, "Unit must be en route to staging perimeter");
+
+    // Advance clock so unit arrives at staging node N17_LOGISTICS
+    for (int i = 0; i < 30; ++i) {
+        center.advanceSimulationClock(1.0);
+        if (v->getState() == VehicleState::STAGED_AT_PERIMETER) break;
+    }
+    ASSERT_TRUE(v->getState() == VehicleState::STAGED_AT_PERIMETER, "Unit must enter STAGED_AT_PERIMETER on arrival at staging node");
+    ASSERT_TRUE(v->isStagedAtPerimeter(), "Unit isStagedAtPerimeter must be true");
+
+    // 3. Test Auto-Resumption when hazard is resolved
+    center.resolveHazard("N17_LOGISTICS", "N29_FREIGHT_HUB");
+    net.updateSegmentHazard("N29_FREIGHT_HUB", "N17_LOGISTICS", "NONE", 1.0, false);
+
+    // Advance simulation clock - should auto-resume transit
+    center.advanceSimulationClock(0.5);
+    ASSERT_TRUE(v->getState() == VehicleState::EN_ROUTE_INCIDENT, "Unit must resume EN_ROUTE_INCIDENT once corridor is unblocked");
+    ASSERT_TRUE(v->getDestinationNodeId() == "N29_FREIGHT_HUB", "Destination must now be N29_FREIGHT_HUB");
+
+    // Advance to scene arrival
+    for (int i = 0; i < 20; ++i) {
+        center.advanceSimulationClock(1.0);
+        if (v->getState() == VehicleState::ON_SCENE) break;
+    }
+    ASSERT_TRUE(v->getState() == VehicleState::ON_SCENE, "Unit must arrive ON_SCENE at previously isolated incident");
+
+    std::cout << "  -> PASSED" << std::endl;
+}
+
 int main() {
     std::cout << "========================================================\n";
     std::cout << "   RUNNING NON-INTERACTIVE V2X CORE ENGINE TEST SUITE   \n";
@@ -336,9 +408,10 @@ int main() {
     testJsonTelemetrySerialization();
     testQueueAgingAndSignalPreemption();
     testResourceDepletionAndResupply();
+    testPerimeterStagingAndAutoResumption();
 
     std::cout << "========================================================\n";
-    std::cout << "   ALL UNIT TESTS PASSED SUCCESSFULLY! (9/9)            \n";
+    std::cout << "   ALL UNIT TESTS PASSED SUCCESSFULLY! (10/10)          \n";
     std::cout << "========================================================\n";
     return 0;
 }

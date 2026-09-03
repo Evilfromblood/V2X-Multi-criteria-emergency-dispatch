@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <algorithm>
 
 class Incident {
 public:
@@ -54,6 +55,16 @@ public:
         m_offRoadApproachMinutes = (speedKmH > 0.0) ? (distKm / speedKmH) * 60.0 : 0.0;
     }
 
+    // Perimeter Staging & Isolation
+    bool isIsolated() const { return m_isIsolated; }
+    void setIsIsolated(bool iso) { m_isIsolated = iso; }
+    bool isStaged() const { return m_isStaged; }
+    void setIsStaged(bool staged) { m_isStaged = staged; }
+    std::string getPerimeterStagingNodeId() const { return m_perimeterStagingNodeId; }
+    void setPerimeterStagingNodeId(const std::string& node) { m_perimeterStagingNodeId = node; }
+    double getStagingDistanceKm() const { return m_stagingDistanceKm; }
+    void setStagingDistanceKm(double dist) { m_stagingDistanceKm = dist; }
+
     // Queue Aging & Starvation Prevention
     double getQueuedAtMinutes() const { return m_queuedAtMinutes; }
     void setQueuedAtMinutes(double t) { m_queuedAtMinutes = t; }
@@ -73,7 +84,7 @@ private:
     double m_y = 0.0;
     std::string m_nearestNodeId;
     std::string m_description;
-    std::string m_status = "PENDING"; // "PENDING", "DISPATCHED", "ON_SCENE", "RESOLVED", "PREEMPTED_QUEUED"
+    std::string m_status = "PENDING"; // "PENDING", "DISPATCHED", "ON_SCENE", "RESOLVED", "PREEMPTED_QUEUED", "ISOLATED_STAGED"
     std::vector<std::string> m_assignedVehicleIds;
 
     double m_createdAtMinutes = 0.0;
@@ -87,6 +98,12 @@ private:
 
     double m_offRoadDistanceKm = 0.0;
     double m_offRoadApproachMinutes = 0.0;
+
+    // Perimeter staging state
+    bool m_isIsolated = false;
+    bool m_isStaged = false;
+    std::string m_perimeterStagingNodeId;
+    double m_stagingDistanceKm = 0.0;
 
     double m_queuedAtMinutes = 0.0;
     double m_waitTimeMinutes = 0.0;

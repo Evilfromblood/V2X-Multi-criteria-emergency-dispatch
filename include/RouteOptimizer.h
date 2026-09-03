@@ -12,6 +12,16 @@ struct RouteResult {
     double estimatedTimeMinutes = 0.0;
 };
 
+struct PerimeterRouteResult {
+    bool fullyReachable = false;
+    bool stagingFeasible = false;
+    std::string stagingNodeId;
+    std::vector<std::string> pathNodes;
+    double travelTimeToStagingMinutes = 0.0;
+    double travelDistanceToStagingKm = 0.0;
+    double straightLineDistanceToTargetKm = 0.0;
+};
+
 class RouteOptimizer {
 public:
     RouteOptimizer() = default;
@@ -19,6 +29,12 @@ public:
     RouteResult findShortestRoute(const RoadNetwork& network, 
                                  const std::string& startNodeId, 
                                  const std::string& endNodeId) const;
+
+    PerimeterRouteResult findPerimeterStagingRoute(const RoadNetwork& network,
+                                                 const std::string& startNodeId,
+                                                 const std::string& endNodeId,
+                                                 double targetX,
+                                                 double targetY) const;
 
     static double calculateSegmentTravelTimeMinutes(const RoadSegment& segment);
 };

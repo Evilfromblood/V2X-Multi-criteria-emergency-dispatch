@@ -95,6 +95,8 @@ export default function IncidentQueue({
         return <span className="badge badge-idle"><CheckCircle className="w-2.5 h-2.5" /> RESOLVED</span>;
       case 'PREEMPTED_QUEUED':
         return <span className="badge badge-transport">PREEMPTED</span>;
+      case 'ISOLATED_STAGED':
+        return <span className="badge font-mono text-[9px] bg-amber-950/80 text-amber-300 border border-amber-500/60">ISOLATED STAGED</span>;
       default:
         return <span className="badge">{status || 'UNKNOWN'}</span>;
     }

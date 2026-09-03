@@ -6,7 +6,7 @@
 
 struct DispatchEvent {
     double timestamp = 0.0;
-    std::string type; // "DISPATCH", "ARRIVAL", "HOSPITAL_DROP", "RETURN_BASE", "PREEMPTION", "V2X_REROUTE", "HAZARD_INJECTED", "HAZARD_RESOLVED"
+    std::string type; // "DISPATCH", "ARRIVAL", "HOSPITAL_DROP", "RETURN_BASE", "PREEMPTION", "V2X_REROUTE", "HAZARD_INJECTED", "HAZARD_RESOLVED", "PERIMETER_STAGING", "STAGING_RESUMED"
     std::string incidentId;
     std::string vehicleId;
     std::string message;
@@ -26,6 +26,8 @@ public:
     void recordDistanceTraveled(double km);
     void recordStarvationEscalation() { ++m_starvationEscalationCount; }
     void recordGreenWavePreemption() { ++m_greenWavePreemptionCount; }
+    void recordPerimeterStaging() { ++m_perimeterStagingCount; }
+    void recordStagingResumed() { ++m_stagingResumedCount; }
     void recordFuelBurn(double liters) { m_totalFuelConsumedLiters += liters; }
     void recordWaterDischarge(double liters) { m_totalWaterDischargedLiters += liters; }
 
@@ -36,6 +38,8 @@ public:
     int getRerouteCount() const { return m_rerouteCount; }
     int getStarvationEscalationCount() const { return m_starvationEscalationCount; }
     int getGreenWavePreemptionCount() const { return m_greenWavePreemptionCount; }
+    int getPerimeterStagingCount() const { return m_perimeterStagingCount; }
+    int getStagingResumedCount() const { return m_stagingResumedCount; }
     double getTotalDistanceTraveledKm() const { return m_totalDistanceTraveledKm; }
     double getTotalFuelConsumedLiters() const { return m_totalFuelConsumedLiters; }
     double getTotalWaterDischargedLiters() const { return m_totalWaterDischargedLiters; }
@@ -55,6 +59,8 @@ private:
     int m_rerouteCount = 0;
     int m_starvationEscalationCount = 0;
     int m_greenWavePreemptionCount = 0;
+    int m_perimeterStagingCount = 0;
+    int m_stagingResumedCount = 0;
     double m_totalDistanceTraveledKm = 0.0;
     double m_totalFuelConsumedLiters = 0.0;
     double m_totalWaterDischargedLiters = 0.0;

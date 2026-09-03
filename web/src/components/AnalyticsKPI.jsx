@@ -50,6 +50,10 @@ export default function AnalyticsKPI({ analytics = {}, clockMinutes = 0, fleet =
         return <span className="badge badge-turnover font-mono text-[9px]">HAZARD ACTIVE</span>;
       case 'HAZARD_RESOLVED':
         return <span className="badge badge-returning font-mono text-[9px]">HAZARD CLEARED</span>;
+      case 'PERIMETER_STAGING':
+        return <span className="badge font-mono text-[9px]" style={{ background: 'rgba(245, 158, 11, 0.25)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.5)' }}>PERIMETER STAGING</span>;
+      case 'STAGING_RESUMED':
+        return <span className="badge font-mono text-[9px]" style={{ background: 'rgba(16, 185, 129, 0.25)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.5)' }}>STAGING RESUMED</span>;
       default:
         return <span className="badge font-mono text-[9px]">{type || 'EVENT'}</span>;
     }
@@ -61,6 +65,7 @@ export default function AnalyticsKPI({ analytics = {}, clockMinutes = 0, fleet =
     if (filterType === 'ALL') return true;
     if (filterType === 'PREEMPTION') return e.type === 'PREEMPTION';
     if (filterType === 'REROUTE') return e.type === 'V2X_REROUTE';
+    if (filterType === 'STAGING') return e.type === 'PERIMETER_STAGING' || e.type === 'STAGING_RESUMED';
     if (filterType === 'DISPATCH') return e.type === 'DISPATCH' || e.type === 'INCIDENT_CREATED';
     if (filterType === 'RESOLVED') return e.type === 'INCIDENT_RESOLVED';
     return true;
@@ -227,7 +232,7 @@ export default function AnalyticsKPI({ analytics = {}, clockMinutes = 0, fleet =
           {/* Filter Pills */}
           <div className="flex items-center gap-1">
             <Filter className="w-3 h-3 text-slate-500" />
-            {['ALL', 'PREEMPTION', 'REROUTE', 'DISPATCH', 'RESOLVED'].map((f) => (
+            {['ALL', 'STAGING', 'PREEMPTION', 'REROUTE', 'DISPATCH', 'RESOLVED'].map((f) => (
               <button
                 key={f}
                 onClick={() => setFilterType(f)}

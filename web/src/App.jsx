@@ -100,6 +100,12 @@ export default function App() {
             addToast('GREEN_WAVE', 'V2X GREEN WAVE', msg);
           } else if (evt.type === 'STARVATION_PREVENTED' || evt.type === 'STARVATION_ESCALATION') {
             addToast('REROUTE', 'STARVATION PREVENTED', msg);
+          } else if (evt.type === 'PERIMETER_STAGING') {
+            soundEffects.playHazardTone();
+            addToast('REROUTE', 'PERIMETER STAGING', msg || 'Incident corridor isolated: Staging at perimeter checkpoint.');
+          } else if (evt.type === 'STAGING_RESUMED') {
+            soundEffects.playDispatchChirp();
+            addToast('DISPATCH', 'CORRIDOR REOPENED', msg || 'Corridor reopened: Staged rescue units advancing to wilderness scene!');
           }
         });
       }
