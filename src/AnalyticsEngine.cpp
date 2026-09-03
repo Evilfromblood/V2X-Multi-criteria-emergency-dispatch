@@ -61,6 +61,8 @@ void AnalyticsEngine::reset() {
     m_resolvedCount = 0;
     m_preemptionCount = 0;
     m_rerouteCount = 0;
+    m_starvationEscalationCount = 0;
+    m_greenWavePreemptionCount = 0;
     m_totalDistanceTraveledKm = 0.0;
     m_sumEtaMinutes = 0.0;
     m_etaSampleCount = 0;
@@ -76,6 +78,8 @@ std::string AnalyticsEngine::toJson() const {
         << "\"resolvedCount\":" << m_resolvedCount << ","
         << "\"preemptionCount\":" << m_preemptionCount << ","
         << "\"rerouteCount\":" << m_rerouteCount << ","
+        << "\"starvationEscalationCount\":" << m_starvationEscalationCount << ","
+        << "\"greenWavePreemptionCount\":" << m_greenWavePreemptionCount << ","
         << "\"totalDistanceTraveledKm\":" << m_totalDistanceTraveledKm << ","
         << "\"meanEtaMinutes\":" << getMeanEtaMinutes() << ","
         << "\"successRatePercent\":" << getSuccessRatePercent() << ","

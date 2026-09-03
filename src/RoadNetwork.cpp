@@ -69,6 +69,29 @@ bool RoadNetwork::hasNode(const std::string& id) const {
     return m_nodes.find(id) != m_nodes.end();
 }
 
+int RoadNetwork::getNodeDegree(const std::string& nodeId) const {
+    auto it = m_adjacency.find(nodeId);
+    return (it != m_adjacency.end()) ? static_cast<int>(it->second.size()) : 0;
+}
+
+void RoadNetwork::setNodeSignalStatus(const std::string& nodeId, const std::string& status) {
+    auto it = m_nodes.find(nodeId);
+    if (it != m_nodes.end()) {
+        it->second.trafficSignalStatus = status;
+    }
+}
+
+std::string RoadNetwork::getNodeSignalStatus(const std::string& nodeId) const {
+    auto it = m_nodes.find(nodeId);
+    return (it != m_nodes.end()) ? it->second.trafficSignalStatus : "NORMAL";
+}
+
+void RoadNetwork::resetAllSignalStatuses() {
+    for (auto& pair : m_nodes) {
+        pair.second.trafficSignalStatus = "NORMAL";
+    }
+}
+
 const std::vector<RoadSegment>& RoadNetwork::getOutgoingSegments(const std::string& nodeId) const {
     auto it = m_adjacency.find(nodeId);
     if (it != m_adjacency.end()) {
@@ -302,7 +325,8 @@ std::string RoadNetwork::toJson() const {
             << "\"x\":" << n.x << ","
             << "\"y\":" << n.y << ","
             << "\"label\":\"" << n.label << "\","
-            << "\"type\":\"" << n.type << "\"}";
+            << "\"type\":\"" << n.type << "\","
+            << "\"trafficSignalStatus\":\"" << n.trafficSignalStatus << "\"}";
     }
     oss << "],\"segments\":[";
     bool firstSeg = true;

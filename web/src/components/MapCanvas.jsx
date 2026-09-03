@@ -390,6 +390,46 @@ function MapCanvasComponent({
         }
       }
 
+      // Dynamic V2X Green Wave Preemption at Junctions
+      if (telemetry?.network?.nodes) {
+        const nodes = telemetry.network.nodes;
+        for (let i = 0; i < nodes.length; ++i) {
+          const n = nodes[i];
+          if (n.trafficSignalStatus === 'GREEN_WAVE_ACTIVE') {
+            const sx = Math.round(PADDING + ((n.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING));
+            const sy = Math.round(height - (PADDING + ((n.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING)));
+
+            const pulseR = 12 + tPulse * 16;
+            ctx.beginPath();
+            ctx.arc(sx, sy, pulseR, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(16, 185, 129, ${1.0 - tPulse})`;
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(sx, sy, 8.5, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.45)';
+            ctx.fill();
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 2.0;
+            ctx.stroke();
+
+            // Tactical Green Wave Callout Tag
+            ctx.fillStyle = 'rgba(6, 78, 59, 0.95)';
+            ctx.fillRect(sx - 36, sy - 24, 72, 13);
+            ctx.strokeStyle = '#34d399';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(sx - 36, sy - 24, 72, 13);
+
+            ctx.fillStyle = '#6ee7b7';
+            ctx.font = 'bold 7.5px JetBrains Mono';
+            ctx.textAlign = 'center';
+            ctx.fillText('GREEN WAVE', sx, sy - 15);
+            ctx.textAlign = 'left';
+          }
+        }
+      }
+
       // Dynamic Active Dijkstra Route Trails
       if (telemetry?.fleet && showTrails) {
         const fleet = telemetry.fleet;

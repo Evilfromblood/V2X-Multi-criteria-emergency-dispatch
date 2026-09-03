@@ -86,6 +86,7 @@ std::string DispatchCenter::createIncident(const std::string& type, int severity
     }
 
     inc.setCreatedAtMinutes(m_currentClockMinutes);
+    inc.setQueuedAtMinutes(m_currentClockMinutes);
 
     m_incidents.push_back(inc);
 
@@ -226,7 +227,19 @@ bool DispatchCenter::attemptPriorityPreemption(Incident& highSeverityIncident) {
     // Search for low-severity (severity 1 or 2) active calls that can be preempted
     for (auto& v : m_fleet) {
         if (v->getState() == VehicleState::EN_ROUTE_INCIDENT) {
-            if (v->getAssignedIncidentSeverity() <= 2) {
+            // Anti-Starvation check: if assigned incident has been escalated or has effective priority >= 4.0, protect it
+            bool callProtected = false;
+            std::string assignedId = v->getAssignedIncidentId();
+            for (const auto& inc : m_incidents) {
+                if (inc.getId() == assignedId) {
+                    if (inc.isEscalated() || inc.getEffectivePriority() >= 4.0) {
+                        callProtected = true;
+                    }
+                    break;
+                }
+            }
+
+            if (!callProtected && v->getAssignedIncidentSeverity() <= 2) {
                 if (v->getType() == "AMBULANCE" && neededAmb > 0) {
                     preemptedVehicles.push_back(v.get());
                     neededAmb--;
@@ -270,6 +283,16 @@ void DispatchCenter::advanceSimulationClock(double deltaMinutes) {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_currentClockMinutes += deltaMinutes;
 
+    // Reset previous V2X Green Wave preemption corridors
+    for (const auto& pair : m_activeGreenWaveSegments) {
+        const RoadSegment* seg = m_network.getSegment(pair.first, pair.second);
+        if (seg && !seg->isBlocked && seg->hazardType == "GREEN_WAVE") {
+            m_network.updateSegmentHazard(pair.first, pair.second, "NONE", 1.0, false);
+        }
+    }
+    m_activeGreenWaveSegments.clear();
+    m_network.resetAllSignalStatuses();
+
     // Advance all vehicles
     for (auto& v : m_fleet) {
         VehicleState prevState = v->getState();
@@ -289,6 +312,31 @@ void DispatchCenter::advanceSimulationClock(double deltaMinutes) {
             } else if (newState == VehicleState::IDLE_STATION) {
                 m_analytics.logEvent(m_currentClockMinutes, "IDLE_STATION", "", v->getId(),
                                      v->getId() + " returned to home base station and is available");
+            }
+        }
+    }
+
+    // V2X Traffic Signal Preemption ("Green Wave Corridor")
+    for (const auto& v : m_fleet) {
+        if (v->getState() == VehicleState::EN_ROUTE_INCIDENT || v->getState() == VehicleState::TRANSPORTING_HOSPITAL) {
+            const auto& path = v->getActiveRoutePath();
+            size_t idx = v->getRouteIndex();
+            if (!path.empty() && idx + 1 < path.size()) {
+                std::string currNode = path[idx];
+                std::string nextNode = path[idx + 1];
+                const RoadSegment* seg = m_network.getSegment(currNode, nextNode);
+                double segLen = seg ? seg->lengthKm : 1.0;
+                double remainingDistKm = segLen - v->getProgressOnSegmentKm();
+
+                // Approaching within 500m (0.5 km) or on final approach edge to a major junction (degree >= 3)
+                if (m_network.getNodeDegree(nextNode) >= 3 && remainingDistKm <= 0.5) {
+                    m_network.setNodeSignalStatus(nextNode, "GREEN_WAVE_ACTIVE");
+                    if (seg && !seg->isBlocked && seg->congestionMultiplier > 0.6) {
+                        m_network.updateSegmentHazard(currNode, nextNode, "GREEN_WAVE", 0.6, false);
+                        m_activeGreenWaveSegments.push_back({currNode, nextNode});
+                    }
+                    m_analytics.recordGreenWavePreemption();
+                }
             }
         }
     }
@@ -341,11 +389,34 @@ void DispatchCenter::advanceSimulationClock(double deltaMinutes) {
         }
     }
 
-    // Retry queued calls (PENDING or PREEMPTED_QUEUED)
+    // Queue Aging & Starvation Prevention
     for (auto& inc : m_incidents) {
         if (inc.getStatus() == "PENDING" || inc.getStatus() == "PREEMPTED_QUEUED") {
-            attemptDispatch(inc);
+            bool justEscalated = inc.updateEffectivePriority(m_currentClockMinutes, 0.25);
+            if (justEscalated) {
+                m_analytics.recordStarvationEscalation();
+                std::ostringstream oss;
+                oss << std::fixed << std::setprecision(2);
+                oss << "[STARVATION PREVENTED] Incident " << inc.getId() 
+                    << " escalated to priority " << inc.getEffectivePriority() 
+                    << " after " << inc.getWaitTimeMinutes() << " min";
+                m_analytics.logEvent(m_currentClockMinutes, "STARVATION_PREVENTED", inc.getId(), "CAD", oss.str());
+            }
         }
+    }
+
+    // Retry queued calls (PENDING or PREEMPTED_QUEUED) prioritized by effective priority descending
+    std::vector<Incident*> queuedCalls;
+    for (auto& inc : m_incidents) {
+        if (inc.getStatus() == "PENDING" || inc.getStatus() == "PREEMPTED_QUEUED") {
+            queuedCalls.push_back(&inc);
+        }
+    }
+    std::sort(queuedCalls.begin(), queuedCalls.end(), [](const Incident* a, const Incident* b) {
+        return a->getEffectivePriority() > b->getEffectivePriority();
+    });
+    for (auto* incPtr : queuedCalls) {
+        attemptDispatch(*incPtr);
     }
 }
 

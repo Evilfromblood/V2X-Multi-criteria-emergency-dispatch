@@ -12,6 +12,7 @@ struct Intersection {
     double y = 0.0;
     std::string label;
     std::string type; // "STATION", "HOSPITAL", "INTERSECTION", "COMMERCIAL", "RESIDENTIAL"
+    std::string trafficSignalStatus = "NORMAL"; // "NORMAL", "GREEN_WAVE_ACTIVE", "CONGESTED"
 };
 
 struct RoadSegment {
@@ -37,6 +38,11 @@ public:
     std::string getNearestNode(double x, double y) const;
     const Intersection* getNode(const std::string& id) const;
     bool hasNode(const std::string& id) const;
+
+    int getNodeDegree(const std::string& nodeId) const;
+    void setNodeSignalStatus(const std::string& nodeId, const std::string& status);
+    std::string getNodeSignalStatus(const std::string& nodeId) const;
+    void resetAllSignalStatuses();
 
     const std::vector<RoadSegment>& getOutgoingSegments(const std::string& nodeId) const;
     const RoadSegment* getSegment(const std::string& from, const std::string& to) const;

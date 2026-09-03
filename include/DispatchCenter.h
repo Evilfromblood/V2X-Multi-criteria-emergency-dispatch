@@ -68,6 +68,7 @@ private:
 
     std::vector<std::unique_ptr<EmergencyVehicle>> m_fleet;
     std::vector<Incident> m_incidents;
+    std::vector<std::pair<std::string, std::string>> m_activeGreenWaveSegments;
     double m_currentClockMinutes = 0.0;
     int m_incidentCounter = 1;
 

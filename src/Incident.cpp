@@ -7,7 +7,23 @@ Incident::Incident(std::string id, std::string type, int severity, double x, dou
     : m_id(id), m_type(type), m_severity(severity), m_x(x), m_y(y), m_description(description) {
     if (m_severity < 1) m_severity = 1;
     if (m_severity > 5) m_severity = 5;
+    m_effectivePriority = static_cast<double>(m_severity);
     determineRequirements();
+}
+
+bool Incident::updateEffectivePriority(double currentClockMinutes, double alpha) {
+    if (m_status == "PENDING" || m_status == "PREEMPTED_QUEUED") {
+        m_waitTimeMinutes = std::max(0.0, currentClockMinutes - m_queuedAtMinutes);
+        double pEff = std::min(5.0, static_cast<double>(m_severity) + alpha * m_waitTimeMinutes);
+        m_effectivePriority = pEff;
+        if (pEff >= 4.0 && !m_isEscalated) {
+            m_isEscalated = true;
+            return true; // Trigger starvation prevented escalation event
+        }
+    } else {
+        m_effectivePriority = static_cast<double>(m_severity);
+    }
+    return false;
 }
 
 void Incident::determineRequirements() {
@@ -65,6 +81,9 @@ std::string Incident::toJson() const {
         << "\"resolvedAtMinutes\":" << m_resolvedAtMinutes << ","
         << "\"offRoadDistanceKm\":" << m_offRoadDistanceKm << ","
         << "\"offRoadApproachMinutes\":" << m_offRoadApproachMinutes << ","
+        << "\"effectivePriority\":" << m_effectivePriority << ","
+        << "\"waitTimeMinutes\":" << m_waitTimeMinutes << ","
+        << "\"isEscalated\":" << (m_isEscalated ? "true" : "false") << ","
         << "\"assignedVehicles\":[";
     for (size_t i = 0; i < m_assignedVehicleIds.size(); ++i) {
         if (i > 0) oss << ",";

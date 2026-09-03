@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   TrendingUp, Clock, AlertOctagon, Route, Gauge, Activity, 
-  CheckCircle, ChevronRight, ShieldAlert, Siren, Filter 
+  CheckCircle, ChevronRight, ShieldAlert, Siren, Filter, Zap, ShieldCheck 
 } from 'lucide-react';
 
 export default function AnalyticsKPI({ analytics = {}, clockMinutes = 0, fleet = [] }) {
@@ -13,6 +13,8 @@ export default function AnalyticsKPI({ analytics = {}, clockMinutes = 0, fleet =
     resolvedCount = 0,
     preemptionCount = 0,
     rerouteCount = 0,
+    starvationEscalationCount = 0,
+    greenWavePreemptionCount = 0,
     totalDistanceTraveledKm = 0,
     meanEtaMinutes = 0,
     successRatePercent = 100,
@@ -27,6 +29,11 @@ export default function AnalyticsKPI({ analytics = {}, clockMinutes = 0, fleet =
     switch (type) {
       case 'PREEMPTION':
         return <span className="badge badge-transport font-mono text-[9px]">PREEMPTION</span>;
+      case 'STARVATION_PREVENTED':
+      case 'STARVATION_ESCALATION':
+        return <span className="badge font-mono text-[9px]" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.4)' }}>STARVATION PREVENTED</span>;
+      case 'GREEN_WAVE':
+        return <span className="badge font-mono text-[9px]" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.4)' }}>GREEN WAVE</span>;
       case 'V2X_REROUTE':
         return <span className="badge badge-enroute font-mono text-[9px]">V2X REROUTE</span>;
       case 'DISPATCH':
@@ -56,8 +63,8 @@ export default function AnalyticsKPI({ analytics = {}, clockMinutes = 0, fleet =
 
   return (
     <div className="flex flex-col gap-3">
-      {/* 6 Metric Stat Cards Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* 8 Metric Stat Cards Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
         {/* 1. Success Rate */}
         <div className="glass-panel p-3 flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400 mb-1">
@@ -142,6 +149,34 @@ export default function AnalyticsKPI({ analytics = {}, clockMinutes = 0, fleet =
           </div>
           <div className="text-[10px] text-slate-500 font-mono mt-1">
             Cumulative fleet transit
+          </div>
+        </div>
+
+        {/* 7. Green Wave Preemptions Active */}
+        <div className="glass-panel p-3 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider font-mono">GREEN WAVE</span>
+            <Zap className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div className="text-xl font-bold font-mono text-emerald-400">
+            {greenWavePreemptionCount}
+          </div>
+          <div className="text-[10px] text-slate-500 font-mono mt-1">
+            Signal preemption
+          </div>
+        </div>
+
+        {/* 8. Starvation Escalations Prevented */}
+        <div className="glass-panel p-3 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider font-mono">ANTI-STARVE</span>
+            <ShieldCheck className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-xl font-bold font-mono text-amber-400">
+            {starvationEscalationCount}
+          </div>
+          <div className="text-[10px] text-slate-500 font-mono mt-1">
+            Escalations saved
           </div>
         </div>
       </div>

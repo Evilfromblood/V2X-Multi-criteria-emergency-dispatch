@@ -50,6 +50,15 @@ public:
         m_offRoadApproachMinutes = (speedKmH > 0.0) ? (distKm / speedKmH) * 60.0 : 0.0;
     }
 
+    // Queue Aging & Starvation Prevention
+    double getQueuedAtMinutes() const { return m_queuedAtMinutes; }
+    void setQueuedAtMinutes(double t) { m_queuedAtMinutes = t; }
+    double getEffectivePriority() const { return m_effectivePriority; }
+    bool isEscalated() const { return m_isEscalated; }
+    void setEscalated(bool val) { m_isEscalated = val; }
+    double getWaitTimeMinutes() const { return m_waitTimeMinutes; }
+    bool updateEffectivePriority(double currentClockMinutes, double alpha = 0.25);
+
     std::string toJson() const;
 
 private:
@@ -74,6 +83,11 @@ private:
 
     double m_offRoadDistanceKm = 0.0;
     double m_offRoadApproachMinutes = 0.0;
+
+    double m_queuedAtMinutes = 0.0;
+    double m_waitTimeMinutes = 0.0;
+    double m_effectivePriority = 1.0;
+    bool m_isEscalated = false;
 };
 
 #endif // INCIDENT_H

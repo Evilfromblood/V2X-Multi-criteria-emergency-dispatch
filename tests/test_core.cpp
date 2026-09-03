@@ -234,6 +234,35 @@ void testJsonTelemetrySerialization() {
     std::cout << "  -> PASSED" << std::endl;
 }
 
+void testQueueAgingAndSignalPreemption() {
+    std::cout << "[Test 8] Dynamic queue aging anti-starvation policy and V2X green wave preemption..." << std::endl;
+    DispatchCenter center;
+
+    // 1. Test Queue Aging
+    Incident inc("TEST-AGE-1", "MEDICAL", 1, 5.0, 5.0, "Low priority call");
+    inc.setQueuedAtMinutes(0.0);
+    inc.updateEffectivePriority(0.0, 0.25);
+    ASSERT_TRUE(inc.getEffectivePriority() == 1.0, "Initial effective priority should equal base severity");
+    ASSERT_TRUE(!inc.isEscalated(), "Should not be escalated initially");
+
+    // At t = 12.0 min: Peff = 1.0 + 0.25 * 12.0 = 4.0 -> Should escalate to prevent starvation
+    bool escalated = inc.updateEffectivePriority(12.0, 0.25);
+    ASSERT_TRUE(escalated, "Incident must escalate when Peff >= 4.0");
+    ASSERT_TRUE(inc.isEscalated(), "isEscalated flag must be set to true");
+    ASSERT_TRUE(inc.getEffectivePriority() >= 4.0, "Effective priority must be >= 4.0");
+
+    // 2. Test Green Wave Preemption signal status
+    RoadNetwork& net = center.getRoadNetwork();
+    ASSERT_TRUE(net.getNodeDegree("N6") >= 3, "Central junction N6 must have degree >= 3");
+    net.setNodeSignalStatus("N6", "GREEN_WAVE_ACTIVE");
+    ASSERT_TRUE(net.getNodeSignalStatus("N6") == "GREEN_WAVE_ACTIVE", "Node signal status must be GREEN_WAVE_ACTIVE");
+
+    net.resetAllSignalStatuses();
+    ASSERT_TRUE(net.getNodeSignalStatus("N6") == "NORMAL", "Reset signal status must restore NORMAL");
+
+    std::cout << "  -> PASSED" << std::endl;
+}
+
 int main() {
     std::cout << "========================================================\n";
     std::cout << "   RUNNING NON-INTERACTIVE V2X CORE ENGINE TEST SUITE   \n";
@@ -246,9 +275,10 @@ int main() {
     testPriorityPreemption();
     testDiscreteEventVehicleLifecycle();
     testJsonTelemetrySerialization();
+    testQueueAgingAndSignalPreemption();
 
     std::cout << "========================================================\n";
-    std::cout << "   ALL UNIT TESTS PASSED SUCCESSFULLY! (7/7)            \n";
+    std::cout << "   ALL UNIT TESTS PASSED SUCCESSFULLY! (8/8)            \n";
     std::cout << "========================================================\n";
     return 0;
 }

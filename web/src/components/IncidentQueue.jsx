@@ -290,6 +290,15 @@ export default function IncidentQueue({ incidents = [], onCreateIncident, defaul
                         +{Number(inc.offRoadDistanceKm).toFixed(1)}km off-road
                       </span>
                     )}
+                    {inc.isEscalated ? (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded font-bold bg-amber-950 text-amber-300 border border-amber-600 animate-pulse">
+                        STARVATION PROTECTED (L{Number(inc.effectivePriority ?? 4).toFixed(1)})
+                      </span>
+                    ) : (inc.status === 'PENDING' || inc.status === 'PREEMPTED_QUEUED') && inc.effectivePriority > inc.severity ? (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-800/80">
+                        Escalating: L{inc.severity} ➔ L{Number(inc.effectivePriority).toFixed(1)} (+0.25/m)
+                      </span>
+                    ) : null}
                   </div>
                   <div className="text-[11px] text-slate-400">{inc.description}</div>
                 </div>

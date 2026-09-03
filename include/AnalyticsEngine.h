@@ -24,12 +24,16 @@ public:
     void recordPreemption();
     void recordDynamicReroute();
     void recordDistanceTraveled(double km);
+    void recordStarvationEscalation() { ++m_starvationEscalationCount; }
+    void recordGreenWavePreemption() { ++m_greenWavePreemptionCount; }
 
     int getTotalIncidents() const { return m_totalIncidents; }
     int getDispatchedCount() const { return m_dispatchedCount; }
     int getResolvedCount() const { return m_resolvedCount; }
     int getPreemptionCount() const { return m_preemptionCount; }
     int getRerouteCount() const { return m_rerouteCount; }
+    int getStarvationEscalationCount() const { return m_starvationEscalationCount; }
+    int getGreenWavePreemptionCount() const { return m_greenWavePreemptionCount; }
     double getTotalDistanceTraveledKm() const { return m_totalDistanceTraveledKm; }
     double getMeanEtaMinutes() const;
     double getSuccessRatePercent() const;
@@ -45,6 +49,8 @@ private:
     int m_resolvedCount = 0;
     int m_preemptionCount = 0;
     int m_rerouteCount = 0;
+    int m_starvationEscalationCount = 0;
+    int m_greenWavePreemptionCount = 0;
     double m_totalDistanceTraveledKm = 0.0;
     double m_sumEtaMinutes = 0.0;
     int m_etaSampleCount = 0;
