@@ -281,15 +281,15 @@ function MapCanvasComponent({
       // Semantic LOD Node Labeling
       if (showNodeLabels) {
         const isMajorLandmark = MAJOR_LANDMARK_NODES.has(n.id);
-        const shouldShowLabel = curZoom >= 0.8 || isMajorLandmark;
+        const shouldShowLabel = curZoom >= 0.75 || isMajorLandmark;
 
         if (shouldShowLabel) {
           offscreenCtx.fillStyle = isMajorLandmark ? '#94a3b8' : '#64748b';
           offscreenCtx.font = isMajorLandmark ? 'bold 8.5px JetBrains Mono' : '8px JetBrains Mono';
           offscreenCtx.textAlign = 'center';
           offscreenCtx.textBaseline = 'top';
-          // Cleanly placed below node circle
-          offscreenCtx.fillText(n.id, sx, sy + 10);
+          // Anchor node names 14px cleanly below node circles
+          offscreenCtx.fillText(n.id, sx, sy + 14);
         }
       }
     });
@@ -628,8 +628,8 @@ function MapCanvasComponent({
           locationGroups.get(groupKey).push(v);
         }
 
-        // Semantic LOD: Low Zoom (< 0.8) Collapsed Station Badges
-        if (curZoom < 0.8) {
+        // Semantic LOD: Low Zoom (< 0.75) Collapsed Station Badges
+        if (curZoom < 0.75) {
           locationGroups.forEach((group) => {
             const idleUnits = group.filter(v => v.state === 'IDLE_STATION');
             if (idleUnits.length > 1) {
@@ -945,7 +945,7 @@ function MapCanvasComponent({
     const zoomFactor = Math.exp(-e.deltaY * 0.0015);
 
     setZoom((prevZoom) => {
-      const newScale = Math.min(Math.max(prevZoom * zoomFactor, 0.4), 4.0);
+      const newScale = Math.min(Math.max(prevZoom * zoomFactor, 0.35), 4.5);
       const canvasCenterX = canvas.width / 2;
       const canvasCenterY = canvas.height / 2;
       const scaleRatio = newScale / prevZoom;
@@ -1182,7 +1182,7 @@ function MapCanvasComponent({
         }}
       >
         <button
-          onClick={() => setZoom(z => Math.min(4.0, parseFloat((z * 1.2).toFixed(2))))}
+          onClick={() => setZoom(z => Math.min(4.5, parseFloat((z * 1.2).toFixed(2))))}
           className="p-1.5 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
           title="Zoom In"
         >
@@ -1190,7 +1190,7 @@ function MapCanvasComponent({
         </button>
 
         <button
-          onClick={() => setZoom(z => Math.max(0.4, parseFloat((z / 1.2).toFixed(2))))}
+          onClick={() => setZoom(z => Math.max(0.35, parseFloat((z / 1.2).toFixed(2))))}
           className="p-1.5 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
           title="Zoom Out"
         >
