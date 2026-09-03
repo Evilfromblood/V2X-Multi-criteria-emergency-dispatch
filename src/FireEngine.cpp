@@ -32,7 +32,7 @@ double FireEngine::calculateSuitability(const Incident& incident, double travelT
     } else if (incident.getType() == "Rescue") {
         score += 30.0;
     } else {
-        score += 5.0;
+        return 0.0; // Incompatible incident type (such as pure Medical)
     }
 
     // Capacity bonuses

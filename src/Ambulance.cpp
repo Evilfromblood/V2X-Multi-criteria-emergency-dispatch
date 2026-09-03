@@ -32,7 +32,7 @@ double Ambulance::calculateSuitability(const Incident& incident, double travelTi
     } else if (incident.getType() == "Rescue") {
         score += 20.0;
     } else {
-        score += 5.0;
+        return 0.0; // Incompatible incident type
     }
 
     // Triage capability comparison
