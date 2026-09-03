@@ -249,7 +249,7 @@ function MapCanvasComponent({
         offscreenCtx.fillStyle = '#64748b';
         offscreenCtx.font = '8px JetBrains Mono';
         offscreenCtx.textAlign = 'right';
-        offscreenCtx.fillText(n.id, sx - 10, sy + 14);
+        offscreenCtx.fillText(n.id, Math.round(sx - 14), Math.round(sy + 14));
         offscreenCtx.textAlign = 'left';
       }
     });
@@ -560,14 +560,14 @@ function MapCanvasComponent({
           const clusterMembers = clusterMap.get(clusterKey) || [v.id];
           const clusterIdx = clusterMembers.indexOf(v.id);
           const clusterTotal = clusterMembers.length;
-          const clusterOffsetX = clusterTotal > 1 ? (clusterIdx - (clusterTotal - 1) * 0.5) * 20 : 0;
+          const clusterOffsetX = clusterTotal > 1 ? Math.round((clusterIdx - (clusterTotal - 1) * 0.5) * 18) : 0;
           const clusterOffsetY = v.state === 'IDLE_STATION' ? -18 : 0;
 
           const baseScreenX = PADDING + ((currentPos.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
           const baseScreenY = height - (PADDING + ((currentPos.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
 
-          const vx = (baseScreenX + clusterOffsetX) | 0;
-          const vy = (baseScreenY + clusterOffsetY) | 0;
+          const vx = Math.round(baseScreenX + clusterOffsetX);
+          const vy = Math.round(baseScreenY + clusterOffsetY);
 
           const isAmbulance = v.type === 'AMBULANCE';
           const isOnScene = v.state === 'ON_SCENE';
@@ -693,10 +693,10 @@ function MapCanvasComponent({
 
           ctx.font = '8px JetBrains Mono';
           const textWidth = ctx.measureText(stateText).width;
-          const pillW = (textWidth + 6) | 0;
+          const pillW = Math.round(textWidth + 6);
           const pillH = 12;
-          const pillX = (vx - pillW * 0.5) | 0;
-          const pillY = (vy - 21) | 0;
+          const pillX = Math.round(vx - pillW * 0.5);
+          const pillY = Math.round(vy - 14 - pillH);
 
           ctx.fillStyle = 'rgba(11, 17, 32, 0.9)';
           ctx.fillRect(pillX, pillY, pillW, pillH);
@@ -706,12 +706,12 @@ function MapCanvasComponent({
 
           ctx.fillStyle = badgeTextColor;
           ctx.textAlign = 'center';
-          ctx.fillText(stateText, vx, pillY + 9);
+          ctx.fillText(stateText, Math.round(vx), Math.round(pillY + 9));
 
           // Vehicle ID Tag
           ctx.fillStyle = '#f8fafc';
           ctx.font = 'bold 8.5px JetBrains Mono';
-          ctx.fillText(v.id, vx, vy + 16);
+          ctx.fillText(v.id, Math.round(vx), Math.round(vy + 16));
           ctx.textAlign = 'left';
         }
       }

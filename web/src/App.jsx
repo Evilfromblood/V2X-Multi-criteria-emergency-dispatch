@@ -242,7 +242,7 @@ export default function App() {
       const clampedX = Math.max(0.5, Math.min(24.5, parseFloat(incidentData.x) || 5.0));
       const clampedY = Math.max(0.5, Math.min(24.5, parseFloat(incidentData.y) || 5.0));
       if (clampedX !== incidentData.x || clampedY !== incidentData.y) {
-        addToast('INFO', 'COORDINATES SNAPPED', 'Incident coordinates outside operational perimeter; snapped to 25km boundary.');
+        addToast('INFO', 'COORDINATES SNAPPED', 'Coordinates out of operational perimeter; snapped to boundary');
       }
       const payload = {
         ...incidentData,
@@ -271,7 +271,7 @@ export default function App() {
     const clampedX = Math.max(0.5, Math.min(24.5, x));
     const clampedY = Math.max(0.5, Math.min(24.5, y));
     if (clampedX !== x || clampedY !== y) {
-      addToast('INFO', 'COORDINATES SNAPPED', 'Coordinates out of operational perimeter; snapped to 25km boundary.');
+      addToast('INFO', 'COORDINATES SNAPPED', 'Coordinates out of operational perimeter; snapped to boundary');
     }
     setClickedCoords({ x: parseFloat(clampedX.toFixed(1)), y: parseFloat(clampedY.toFixed(1)) });
     setActiveTab('incidents');
