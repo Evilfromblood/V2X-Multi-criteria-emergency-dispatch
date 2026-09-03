@@ -13,7 +13,6 @@ void RoadNetwork::addRoadSegment(const std::string& u, const std::string& v, dou
 void RoadNetwork::displayNetwork() const {
     std::cout << "\n--- Road Network Status ---\n";
     for (const auto& pair : adjacencyList) {
-        const std::string& u = pair.first;
         for (const auto& segment : pair.second) {
             std::cout << "Segment [" << segment.fromNode << " -> " << segment.toNode << "] "
                       << "| Length: " << segment.lengthKm << " km | Speed Limit: " << segment.speedLimitKmH << " km/h "

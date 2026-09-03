@@ -1,14 +1,27 @@
 @echo off
 set PATH=C:\msys64\ucrt64\bin;%PATH%
-echo Compiling Multi-Criteria Emergency Dispatch...
-g++ -std=c++17 -Iinclude src/main.cpp src/DispatchCenter.cpp src/EmergencyVehicle.cpp src/Incident.cpp src/Ambulance.cpp src/FireEngine.cpp -o dispatch.exe
+echo Configuring and Building Multi-Criteria Emergency Dispatch...
+
+cmake -B build -G "MinGW Makefiles"
+if %ERRORLEVEL% NEQ 0 (
+    cmake -B build
+)
+
+cmake --build build
 
 if %ERRORLEVEL% EQU 0 (
     echo.
-    echo Compilation successful! Running dispatch.exe...
     echo ===================================================
-    dispatch.exe
+    echo Running Automated Unit Tests...
+    echo ===================================================
+    build\run_tests.exe
+    
+    echo.
+    echo ===================================================
+    echo Running Main Simulation...
+    echo ===================================================
+    build\dispatch_simulation.exe
 ) else (
     echo.
-    echo Compilation failed.
+    echo Build failed.
 )
