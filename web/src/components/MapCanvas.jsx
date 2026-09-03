@@ -1,8 +1,21 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, Layers, Eye, EyeOff } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 
 const PADDING = 60;
 const WORLD_SIZE = 25.0; // 25km Metropolitan Grid scale
+
+const MAJOR_LANDMARK_NODES = new Set([
+  'N1_HQ', 
+  'N11_HOSPITAL', 
+  'N21_CLINIC', 
+  'N17_LOGISTICS', 
+  'N26_AIRPORT_DEPOT', 
+  'N25_AIRPORT', 
+  'N28_CARGO_DEPOT',
+  'N29_FREIGHT_HUB',
+  'N30_NORTH_METRO',
+  'N23_MARINA'
+]);
 
 function MapCanvasComponent({ 
   telemetry, 
@@ -20,10 +33,15 @@ function MapCanvasComponent({
   // Interactive Zoom & Pan State
   const [zoom, setZoom] = useState(1.0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [hoveredVehicleId, setHoveredVehicleId] = useState(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState(null);
+
   const isDraggingRef = useRef(false);
+  const didDragRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
   const panRef = useRef({ x: 0, y: 0 });
   const zoomRef = useRef(1.0);
+  const hoveredVehicleIdRef = useRef(null);
 
   // Layer Toggles
   const [showZones, setShowZones] = useState(true);
@@ -31,7 +49,7 @@ function MapCanvasComponent({
   const [showTrails, setShowTrails] = useState(true);
   const [showCongestion, setShowCongestion] = useState(true);
 
-  // Sync refs for animation frame
+  // Sync refs
   useEffect(() => {
     panRef.current = pan;
   }, [pan]);
@@ -39,6 +57,10 @@ function MapCanvasComponent({
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+
+  useEffect(() => {
+    hoveredVehicleIdRef.current = hoveredVehicleId;
+  }, [hoveredVehicleId]);
 
   // Cached off-screen canvas for static layer
   const offscreenCanvasRef = useRef(null);
@@ -66,15 +88,15 @@ function MapCanvasComponent({
   // Mark offscreen background dirty if segments, hazards, or layer toggles change
   useEffect(() => {
     offscreenDirtyRef.current = true;
-  }, [telemetry?.network?.segments, telemetry?.hazards, showZones, showNodeLabels]);
+  }, [telemetry?.network?.segments, telemetry?.hazards, showZones, showNodeLabels, zoom]);
 
-  // 1. LAYER 1: Pre-render static background
-  const renderStaticBackground = useCallback((offscreenCtx, width, height) => {
+  // 1. LAYER 1: Pre-render static background & node baseline
+  const renderStaticBackground = useCallback((offscreenCtx, width, height, curZoom) => {
     offscreenCtx.fillStyle = '#080c14';
     offscreenCtx.fillRect(0, 0, width, height);
 
     // Tactical 25km Coordinate Grid
-    offscreenCtx.strokeStyle = 'rgba(30, 41, 59, 0.45)';
+    offscreenCtx.strokeStyle = 'rgba(30, 41, 59, 0.4)';
     offscreenCtx.lineWidth = 1;
     const gridStep = 40;
 
@@ -105,7 +127,7 @@ function MapCanvasComponent({
 
     const nodeMap = nodeMapRef.current;
 
-    // Tactical Sector Zone Callouts
+    // Tactical Sector Zone Callouts (subtle deep background)
     if (showZones) {
       nodeMap.forEach((n) => {
         const sx = (PADDING + ((n.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
@@ -114,73 +136,83 @@ function MapCanvasComponent({
         if (n.id === 'N11_HOSPITAL') {
           offscreenCtx.beginPath();
           offscreenCtx.arc(sx, sy, 48, 0, Math.PI * 2);
-          offscreenCtx.fillStyle = 'rgba(13, 148, 136, 0.08)';
+          offscreenCtx.fillStyle = 'rgba(13, 148, 136, 0.05)';
           offscreenCtx.fill();
-          offscreenCtx.strokeStyle = 'rgba(20, 184, 166, 0.4)';
-          offscreenCtx.lineWidth = 1.5;
+          offscreenCtx.strokeStyle = 'rgba(20, 184, 166, 0.25)';
+          offscreenCtx.lineWidth = 1.2;
           offscreenCtx.setLineDash([4, 4]);
           offscreenCtx.stroke();
           offscreenCtx.setLineDash([]);
 
-          offscreenCtx.fillStyle = 'rgba(45, 212, 191, 0.8)';
+          offscreenCtx.fillStyle = 'rgba(45, 212, 191, 0.7)';
           offscreenCtx.font = 'bold 8px JetBrains Mono';
-          offscreenCtx.fillText('METRO TRAUMA CENTER', sx - 50, sy - 54);
+          offscreenCtx.textAlign = 'center';
+          offscreenCtx.fillText('METRO TRAUMA CENTER', sx, sy - 52);
+          offscreenCtx.textAlign = 'left';
         } else if (n.id === 'N21_CLINIC') {
           offscreenCtx.beginPath();
           offscreenCtx.arc(sx, sy, 42, 0, Math.PI * 2);
-          offscreenCtx.fillStyle = 'rgba(13, 148, 136, 0.08)';
+          offscreenCtx.fillStyle = 'rgba(13, 148, 136, 0.05)';
           offscreenCtx.fill();
-          offscreenCtx.strokeStyle = 'rgba(20, 184, 166, 0.4)';
-          offscreenCtx.lineWidth = 1.5;
+          offscreenCtx.strokeStyle = 'rgba(20, 184, 166, 0.25)';
+          offscreenCtx.lineWidth = 1.2;
           offscreenCtx.setLineDash([4, 4]);
           offscreenCtx.stroke();
           offscreenCtx.setLineDash([]);
 
-          offscreenCtx.fillStyle = 'rgba(45, 212, 191, 0.8)';
+          offscreenCtx.fillStyle = 'rgba(45, 212, 191, 0.7)';
           offscreenCtx.font = 'bold 8px JetBrains Mono';
-          offscreenCtx.fillText('EAST COMMUNITY CLINIC', sx - 54, sy - 48);
+          offscreenCtx.textAlign = 'center';
+          offscreenCtx.fillText('EAST COMMUNITY CLINIC', sx, sy - 46);
+          offscreenCtx.textAlign = 'left';
         } else if (n.id === 'N1_HQ') {
           offscreenCtx.beginPath();
           offscreenCtx.arc(sx, sy, 45, 0, Math.PI * 2);
-          offscreenCtx.fillStyle = 'rgba(37, 99, 235, 0.08)';
+          offscreenCtx.fillStyle = 'rgba(37, 99, 235, 0.05)';
           offscreenCtx.fill();
-          offscreenCtx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
-          offscreenCtx.lineWidth = 1.5;
+          offscreenCtx.strokeStyle = 'rgba(59, 130, 246, 0.25)';
+          offscreenCtx.lineWidth = 1.2;
           offscreenCtx.setLineDash([4, 4]);
           offscreenCtx.stroke();
           offscreenCtx.setLineDash([]);
 
-          offscreenCtx.fillStyle = 'rgba(96, 165, 250, 0.8)';
+          offscreenCtx.fillStyle = 'rgba(96, 165, 250, 0.7)';
           offscreenCtx.font = 'bold 8px JetBrains Mono';
-          offscreenCtx.fillText('HQ DISPATCH DEPOT', sx - 45, sy - 50);
+          offscreenCtx.textAlign = 'center';
+          offscreenCtx.fillText('HQ DISPATCH DEPOT', sx, sy - 48);
+          offscreenCtx.textAlign = 'left';
         } else if (n.id === 'N17_LOGISTICS') {
           offscreenCtx.beginPath();
           offscreenCtx.arc(sx, sy, 42, 0, Math.PI * 2);
-          offscreenCtx.fillStyle = 'rgba(245, 158, 11, 0.08)';
+          offscreenCtx.fillStyle = 'rgba(245, 158, 11, 0.05)';
           offscreenCtx.fill();
-          offscreenCtx.strokeStyle = 'rgba(245, 158, 11, 0.35)';
-          offscreenCtx.lineWidth = 1.5;
+          offscreenCtx.strokeStyle = 'rgba(245, 158, 11, 0.25)';
+          offscreenCtx.lineWidth = 1.2;
           offscreenCtx.setLineDash([4, 4]);
           offscreenCtx.stroke();
           offscreenCtx.setLineDash([]);
 
-          offscreenCtx.fillStyle = 'rgba(251, 191, 36, 0.8)';
+          offscreenCtx.fillStyle = 'rgba(251, 191, 36, 0.7)';
           offscreenCtx.font = 'bold 8px JetBrains Mono';
-          offscreenCtx.fillText('LOGISTICS HUB & TANKERS', sx - 56, sy - 48);
+          offscreenCtx.textAlign = 'center';
+          offscreenCtx.fillText('LOGISTICS HUB & DEPOT', sx, sy - 46);
+          offscreenCtx.textAlign = 'left';
         } else if (n.id === 'N26_AIRPORT_DEPOT') {
           offscreenCtx.beginPath();
           offscreenCtx.arc(sx, sy, 40, 0, Math.PI * 2);
-          offscreenCtx.fillStyle = 'rgba(168, 85, 247, 0.08)';
+          offscreenCtx.fillStyle = 'rgba(168, 85, 247, 0.05)';
           offscreenCtx.fill();
-          offscreenCtx.strokeStyle = 'rgba(168, 85, 247, 0.35)';
-          offscreenCtx.lineWidth = 1.5;
+          offscreenCtx.strokeStyle = 'rgba(168, 85, 247, 0.25)';
+          offscreenCtx.lineWidth = 1.2;
           offscreenCtx.setLineDash([4, 4]);
           offscreenCtx.stroke();
           offscreenCtx.setLineDash([]);
 
-          offscreenCtx.fillStyle = 'rgba(192, 132, 252, 0.8)';
+          offscreenCtx.fillStyle = 'rgba(192, 132, 252, 0.7)';
           offscreenCtx.font = 'bold 8px JetBrains Mono';
-          offscreenCtx.fillText('AIRPORT CRASH-RESCUE BASE', sx - 64, sy - 45);
+          offscreenCtx.textAlign = 'center';
+          offscreenCtx.fillText('AIRPORT RESCUE BASE', sx, sy - 44);
+          offscreenCtx.textAlign = 'left';
         }
       });
     }
@@ -200,57 +232,65 @@ function MapCanvasComponent({
         offscreenCtx.beginPath();
         offscreenCtx.moveTo(x1, y1);
         offscreenCtx.lineTo(x2, y2);
-        offscreenCtx.strokeStyle = 'rgba(51, 65, 85, 0.65)';
+        offscreenCtx.strokeStyle = 'rgba(51, 65, 85, 0.45)';
         offscreenCtx.lineWidth = 2.0;
         offscreenCtx.stroke();
       });
     }
 
-    // Intersections (32 Nodes) with Anti-Collision Layout
+    // Intersections (32 Nodes) - Decluttered hierarchy
     nodeMap.forEach((n) => {
       const sx = (PADDING + ((n.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
       const sy = (height - (PADDING + ((n.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
 
       offscreenCtx.beginPath();
       if (n.type === 'HOSPITAL') {
-        offscreenCtx.arc(sx, sy, 8, 0, Math.PI * 2);
+        offscreenCtx.arc(sx, sy, 7.5, 0, Math.PI * 2);
         offscreenCtx.fillStyle = '#0f766e';
         offscreenCtx.fill();
         offscreenCtx.strokeStyle = '#14b8a6';
-        offscreenCtx.lineWidth = 2;
+        offscreenCtx.lineWidth = 1.8;
         offscreenCtx.stroke();
 
         // Medical Cross
         offscreenCtx.fillStyle = '#ffffff';
-        offscreenCtx.fillRect(sx - 1.5, sy - 5, 3, 10);
-        offscreenCtx.fillRect(sx - 5, sy - 1.5, 10, 3);
+        offscreenCtx.fillRect(sx - 1.2, sy - 4, 2.4, 8);
+        offscreenCtx.fillRect(sx - 4, sy - 1.2, 8, 2.4);
       } else if (n.type === 'STATION') {
-        offscreenCtx.arc(sx, sy, 8, 0, Math.PI * 2);
+        offscreenCtx.arc(sx, sy, 7.5, 0, Math.PI * 2);
         offscreenCtx.fillStyle = '#1e3a8a';
         offscreenCtx.fill();
         offscreenCtx.strokeStyle = '#3b82f6';
-        offscreenCtx.lineWidth = 2;
+        offscreenCtx.lineWidth = 1.8;
         offscreenCtx.stroke();
 
-        offscreenCtx.fillStyle = '#ffffff';
-        offscreenCtx.font = 'bold 7px JetBrains Mono';
-        offscreenCtx.textAlign = 'center';
-        offscreenCtx.fillText('BASE', sx, sy + 2.5);
+        // Base anchor dot
+        offscreenCtx.fillStyle = '#93c5fd';
+        offscreenCtx.beginPath();
+        offscreenCtx.arc(sx, sy, 2.2, 0, Math.PI * 2);
+        offscreenCtx.fill();
       } else {
-        offscreenCtx.arc(sx, sy, 4.5, 0, Math.PI * 2);
+        offscreenCtx.arc(sx, sy, 4.0, 0, Math.PI * 2);
         offscreenCtx.fillStyle = '#1e293b';
         offscreenCtx.fill();
         offscreenCtx.strokeStyle = '#64748b';
-        offscreenCtx.lineWidth = 1.2;
+        offscreenCtx.lineWidth = 1.0;
         offscreenCtx.stroke();
       }
 
+      // Semantic LOD Node Labeling
       if (showNodeLabels) {
-        offscreenCtx.fillStyle = '#64748b';
-        offscreenCtx.font = '8px JetBrains Mono';
-        offscreenCtx.textAlign = 'right';
-        offscreenCtx.fillText(n.id, Math.round(sx - 14), Math.round(sy + 14));
-        offscreenCtx.textAlign = 'left';
+        const isMajorLandmark = MAJOR_LANDMARK_NODES.has(n.id);
+        const shouldShowLabel = curZoom >= 0.8 || isMajorLandmark;
+
+        if (shouldShowLabel) {
+          offscreenCtx.fillStyle = isMajorLandmark ? '#94a3b8' : '#64748b';
+          offscreenCtx.font = isMajorLandmark ? 'bold 8.5px JetBrains Mono' : '8px JetBrains Mono';
+          offscreenCtx.textAlign = 'center';
+          offscreenCtx.textBaseline = 'top';
+          // Cleanly placed below node circle
+          offscreenCtx.fillText(n.id, sx, sy + 10);
+        }
       }
     });
   }, [telemetry?.network, showZones, showNodeLabels]);
@@ -281,6 +321,9 @@ function MapCanvasComponent({
 
       const width = canvas.width;
       const height = canvas.height;
+      const curZoom = zoomRef.current;
+      const curPan = panRef.current;
+      const hoveredVid = hoveredVehicleIdRef.current;
 
       // Re-render offscreen cache if dirty
       if (offscreenDirtyRef.current) {
@@ -290,13 +333,9 @@ function MapCanvasComponent({
           offscreenCanvas.height = height;
         }
         const offscreenCtx = offscreenCanvas.getContext('2d', { alpha: false });
-        renderStaticBackground(offscreenCtx, width, height);
+        renderStaticBackground(offscreenCtx, width, height, curZoom);
         offscreenDirtyRef.current = false;
       }
-
-      // Smooth Camera tracking if vehicle focused
-      const curZoom = zoomRef.current;
-      const curPan = panRef.current;
 
       ctx.save();
       ctx.clearRect(0, 0, width, height);
@@ -339,7 +378,7 @@ function MapCanvasComponent({
 
           if (seg.isBlocked) {
             ctx.strokeStyle = '#ef4444';
-            ctx.lineWidth = isSelected ? 5 : 3.5;
+            ctx.lineWidth = isSelected ? 4.5 : 3.2;
             ctx.setLineDash([8, 5]);
             ctx.stroke();
             ctx.setLineDash([]);
@@ -349,122 +388,65 @@ function MapCanvasComponent({
 
             ctx.beginPath();
             ctx.arc(mx, my, 8, 0, Math.PI * 2);
-            ctx.fillStyle = '#dc2626';
+            ctx.fillStyle = '#ef4444';
             ctx.fill();
-            ctx.strokeStyle = '#fca5a5';
+            ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 1.2;
             ctx.stroke();
 
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 9px monospace';
+            ctx.font = 'bold 9px sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('✕', mx, my + 3);
-            ctx.textAlign = 'left';
-
-            ctx.beginPath();
-            ctx.arc(mx, my, 8 + tPulse * 7, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(239, 68, 68, ${1 - tPulse})`;
-            ctx.lineWidth = 1.2;
-            ctx.stroke();
+            ctx.textBaseline = 'middle';
+            ctx.fillText('✕', mx, my);
+            ctx.textBaseline = 'alphabetic';
           } else if (seg.congestionMultiplier > 1.5) {
-            ctx.strokeStyle = '#f59e0b';
-            ctx.lineWidth = isSelected ? 5 : 3;
-            ctx.stroke();
-
-            const mx = ((x1 + x2) * 0.5) | 0;
-            const my = ((y1 + y2) * 0.5) | 0;
-            ctx.beginPath();
-            ctx.arc(mx, my, 6, 0, Math.PI * 2);
-            ctx.fillStyle = '#f59e0b';
-            ctx.fill();
-            ctx.fillStyle = '#000000';
-            ctx.font = 'bold 7px JetBrains Mono';
-            ctx.textAlign = 'center';
-            ctx.fillText(`x${seg.congestionMultiplier.toFixed(1)}`, mx, my + 2);
-            ctx.textAlign = 'left';
-          } else if (isSelected) {
-            ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 4;
+            ctx.strokeStyle = seg.congestionMultiplier >= 3.0 ? '#f97316' : '#eab308';
+            ctx.lineWidth = isSelected ? 4 : 2.8;
             ctx.stroke();
           }
         }
       }
 
-      // Dynamic V2X Green Wave Preemption at Junctions
-      if (telemetry?.network?.nodes) {
-        const nodes = telemetry.network.nodes;
-        for (let i = 0; i < nodes.length; ++i) {
-          const n = nodes[i];
-          if (n.trafficSignalStatus === 'GREEN_WAVE_ACTIVE') {
-            const sx = Math.round(PADDING + ((n.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING));
-            const sy = Math.round(height - (PADDING + ((n.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING)));
-
-            const pulseR = 12 + tPulse * 16;
-            ctx.beginPath();
-            ctx.arc(sx, sy, pulseR, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(16, 185, 129, ${1.0 - tPulse})`;
-            ctx.lineWidth = 2.5;
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.arc(sx, sy, 8.5, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(16, 185, 129, 0.45)';
-            ctx.fill();
-            ctx.strokeStyle = '#10b981';
-            ctx.lineWidth = 2.0;
-            ctx.stroke();
-
-            // Tactical Green Wave Callout Tag
-            ctx.fillStyle = 'rgba(6, 78, 59, 0.95)';
-            ctx.fillRect(sx - 36, sy - 24, 72, 13);
-            ctx.strokeStyle = '#34d399';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(sx - 36, sy - 24, 72, 13);
-
-            ctx.fillStyle = '#6ee7b7';
-            ctx.font = 'bold 7.5px JetBrains Mono';
-            ctx.textAlign = 'center';
-            ctx.fillText('GREEN WAVE', sx, sy - 15);
-            ctx.textAlign = 'left';
-          }
-        }
-      }
-
-      // Dynamic Active Dijkstra Route Trails
-      if (telemetry?.fleet && showTrails) {
+      // Dynamic Vehicle Route Trails (Active in-transit vehicles only)
+      if (telemetry?.fleet && Array.isArray(telemetry.fleet) && showTrails) {
         const fleet = telemetry.fleet;
         for (let i = 0; i < fleet.length; ++i) {
           const v = fleet[i];
-          if (!v) continue;
-          const routePath = Array.isArray(v.activeRoutePath) ? v.activeRoutePath : (Array.isArray(v.plannedPath) ? v.plannedPath : null);
-          if (routePath && routePath.length > 1 && v.state !== 'IDLE_STATION') {
-            const isAmbulance = v.type === 'AMBULANCE';
-            const isFocused = focusedVehicleId === v.id;
+          if (!v || !Array.isArray(v.activeRoutePath) || v.activeRoutePath.length <= 1) continue;
+          if (v.state === 'IDLE_STATION') continue;
 
-            ctx.beginPath();
-            let started = false;
-            for (let p = 0; p < routePath.length; ++p) {
-              const node = nodeMap.get(routePath[p]);
-              if (node && typeof node.x === 'number' && typeof node.y === 'number') {
-                const sx = (PADDING + ((node.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
-                const sy = (height - (PADDING + ((node.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
-                if (!started) {
-                  ctx.moveTo(sx, sy);
-                  started = true;
-                } else {
-                  ctx.lineTo(sx, sy);
-                }
-              }
+          const isAmbulance = v.type === 'AMBULANCE';
+          const isFocused = focusedVehicleId === v.id;
+
+          ctx.beginPath();
+          let started = false;
+          for (let j = 0; j < v.activeRoutePath.length; ++j) {
+            const nodeId = v.activeRoutePath[j];
+            const node = nodeMap.get(nodeId);
+            if (!node) continue;
+
+            const sx = (PADDING + ((node.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+            const sy = (height - (PADDING + ((node.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
+
+            if (!started) {
+              ctx.moveTo(sx, sy);
+              started = true;
+            } else {
+              ctx.lineTo(sx, sy);
             }
+          }
 
-            ctx.strokeStyle = isAmbulance 
-              ? (isFocused ? 'rgba(6, 182, 212, 0.95)' : 'rgba(6, 182, 212, 0.5)')
-              : (isFocused ? 'rgba(249, 115, 22, 0.95)' : 'rgba(249, 115, 22, 0.5)');
-            ctx.lineWidth = isFocused ? 4.5 : 3.0;
-            ctx.setLineDash([8, 8]);
-            ctx.lineDashOffset = -animOffsetRef.current * 0.8;
+          if (started) {
+            ctx.strokeStyle = isFocused
+              ? 'rgba(56, 189, 248, 0.95)'
+              : isAmbulance
+                ? 'rgba(6, 182, 212, 0.65)'
+                : 'rgba(249, 115, 22, 0.65)';
+            ctx.lineWidth = isFocused ? 3.5 : 2.0;
+            ctx.setLineDash([6, 6]);
+            ctx.lineDashOffset = -animOffsetRef.current;
             ctx.stroke();
-
             ctx.setLineDash([]);
             ctx.lineDashOffset = 0;
           }
@@ -519,8 +501,9 @@ function MapCanvasComponent({
                 ctx.fillStyle = '#fdba74';
                 ctx.font = '7px JetBrains Mono';
                 ctx.textAlign = 'center';
-                ctx.fillText(`OFF-GRID`, mx, my + 3);
-                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`OFF-GRID`, mx, my);
+                ctx.textBaseline = 'alphabetic';
               }
             }
           }
@@ -569,8 +552,9 @@ function MapCanvasComponent({
 
               ctx.fillStyle = '#fbbf24';
               ctx.textAlign = 'center';
-              ctx.fillText(label, smx, smy + 3);
-              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(label, smx, smy);
+              ctx.textBaseline = 'alphabetic';
             }
           }
 
@@ -607,7 +591,9 @@ function MapCanvasComponent({
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 8px JetBrains Mono';
           ctx.textAlign = 'center';
-          ctx.fillText(`L${sev}`, ix, iy + 3);
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`L${sev}`, ix, iy);
+          ctx.textBaseline = 'alphabetic';
 
           ctx.textAlign = 'left';
           ctx.fillStyle = '#f8fafc';
@@ -619,25 +605,65 @@ function MapCanvasComponent({
         }
       }
 
-      // Dynamic Moving Vehicles
+      // Dynamic Moving Vehicles & Radial Depot Docking
       if (telemetry?.fleet && Array.isArray(telemetry.fleet)) {
         const fleet = telemetry.fleet;
         const posMap = vehiclePosMapRef.current;
         const factor = 1 - Math.exp(-9 * dt);
 
-        const clusterMap = new Map();
+        // Group vehicles by location key (node / coord)
+        const locationGroups = new Map();
         for (let i = 0; i < fleet.length; ++i) {
           const v = fleet[i];
           if (!v) continue;
           const vxVal = typeof v.x === 'number' ? v.x : (parseFloat(v.x) || 0);
           const vyVal = typeof v.y === 'number' ? v.y : (parseFloat(v.y) || 0);
-          const clusterKey = `${Math.round(vxVal * 2)}_${Math.round(vyVal * 2)}`;
-          if (!clusterMap.has(clusterKey)) {
-            clusterMap.set(clusterKey, []);
+          const groupKey = v.state === 'IDLE_STATION' && v.homeBaseNode 
+            ? `NODE_${v.homeBaseNode}` 
+            : `${Math.round(vxVal * 10)}_${Math.round(vyVal * 10)}`;
+
+          if (!locationGroups.has(groupKey)) {
+            locationGroups.set(groupKey, []);
           }
-          clusterMap.get(clusterKey).push(v.id);
+          locationGroups.get(groupKey).push(v);
         }
 
+        // Semantic LOD: Low Zoom (< 0.8) Collapsed Station Badges
+        if (curZoom < 0.8) {
+          locationGroups.forEach((group) => {
+            const idleUnits = group.filter(v => v.state === 'IDLE_STATION');
+            if (idleUnits.length > 1) {
+              const sample = idleUnits[0];
+              const targetX = typeof sample.x === 'number' ? sample.x : (parseFloat(sample.x) || 0);
+              const targetY = typeof sample.y === 'number' ? sample.y : (parseFloat(sample.y) || 0);
+
+              const sx = PADDING + ((targetX - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
+              const sy = height - (PADDING + ((targetY - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+
+              const ambCount = idleUnits.filter(v => v.type === 'AMBULANCE').length;
+              const engCount = idleUnits.filter(v => v.type === 'FIRE_ENGINE').length;
+              const badgeText = `${ambCount > 0 ? `🚑${ambCount}` : ''} ${engCount > 0 ? `🚒${engCount}` : ''}`.trim() || `${idleUnits.length} Units`;
+
+              ctx.font = 'bold 8px JetBrains Mono';
+              const textW = ctx.measureText(badgeText).width;
+              const pillW = textW + 10;
+
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+              ctx.fillRect(sx - pillW / 2, sy - 22, pillW, 14);
+              ctx.strokeStyle = '#38bdf8';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(sx - pillW / 2, sy - 22, pillW, 14);
+
+              ctx.fillStyle = '#38bdf8';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(badgeText, sx, sy - 15);
+              ctx.textBaseline = 'alphabetic';
+            }
+          });
+        }
+
+        // Render individual vehicles
         for (let i = 0; i < fleet.length; ++i) {
           const v = fleet[i];
           if (!v) continue;
@@ -646,7 +672,6 @@ function MapCanvasComponent({
           const targetY = typeof v.y === 'number' ? v.y : (parseFloat(v.y) || 0);
 
           let currentPos = posMap.get(v.id);
-
           if (!currentPos) {
             currentPos = { x: targetX, y: targetY, heading: 0 };
             posMap.set(v.id, currentPos);
@@ -661,213 +686,233 @@ function MapCanvasComponent({
             }
           }
 
-          const clusterKey = `${Math.round(targetX * 2)}_${Math.round(targetY * 2)}`;
-          const clusterMembers = clusterMap.get(clusterKey) || [v.id];
-          const clusterIdx = clusterMembers.indexOf(v.id);
-          const clusterTotal = clusterMembers.length;
-          const clusterOffsetX = clusterTotal > 1 ? Math.round((clusterIdx - (clusterTotal - 1) * 0.5) * 18) : 0;
-          const clusterOffsetY = v.state === 'IDLE_STATION' ? -18 : 0;
-
           const baseScreenX = PADDING + ((currentPos.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
           const baseScreenY = height - (PADDING + ((currentPos.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
 
-          const vx = Math.round(baseScreenX + clusterOffsetX);
-          const vy = Math.round(baseScreenY + clusterOffsetY);
+          // Clean Radial Fan offset for vehicles docked at base / station
+          let vx = baseScreenX;
+          let vy = baseScreenY;
+
+          const groupKey = v.state === 'IDLE_STATION' && v.homeBaseNode 
+            ? `NODE_${v.homeBaseNode}` 
+            : `${Math.round(targetX * 10)}_${Math.round(targetY * 10)}`;
+          const group = locationGroups.get(groupKey) || [v];
+
+          if (group.length > 1 && v.state === 'IDLE_STATION') {
+            const idx = group.indexOf(v);
+            const total = group.length;
+            // Radial arc fan around depot at radius 22px
+            const startAngle = -Math.PI * 0.75;
+            const endAngle = Math.PI * 0.75;
+            const angle = total === 1 ? -Math.PI / 2 : startAngle + (idx / (total - 1)) * (endAngle - startAngle);
+            const radius = 22;
+            vx = baseScreenX + Math.cos(angle) * radius;
+            vy = baseScreenY + Math.sin(angle) * radius;
+          } else if (group.length > 1 && v.state !== 'IDLE_STATION') {
+            const idx = group.indexOf(v);
+            const total = group.length;
+            vx = baseScreenX + (idx - (total - 1) * 0.5) * 16;
+          }
+
+          vx = Math.round(vx);
+          vy = Math.round(vy);
 
           const isAmbulance = v.type === 'AMBULANCE';
           const isOnScene = v.state === 'ON_SCENE';
           const isFocused = focusedVehicleId === v.id;
+          const isHovered = hoveredVid === v.id;
+          const isIdleAtBase = v.state === 'IDLE_STATION';
 
           // Focus indicator ring & crosshair
           if (isFocused) {
             ctx.beginPath();
-            ctx.arc(vx, vy, 20 + tPulse * 7, 0, Math.PI * 2);
+            ctx.arc(vx, vy, 18 + tPulse * 6, 0, Math.PI * 2);
             ctx.strokeStyle = `rgba(56, 189, 248, ${1 - tPulse})`;
             ctx.lineWidth = 2.0;
             ctx.stroke();
 
             ctx.beginPath();
-            ctx.arc(vx, vy, 17, 0, Math.PI * 2);
+            ctx.arc(vx, vy, 15, 0, Math.PI * 2);
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 1.5;
             ctx.stroke();
 
             ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 1.2;
             ctx.beginPath();
-            ctx.moveTo(vx - 24, vy); ctx.lineTo(vx - 17, vy);
-            ctx.moveTo(vx + 17, vy); ctx.lineTo(vx + 24, vy);
-            ctx.moveTo(vx, vy - 24); ctx.lineTo(vx, vy - 17);
-            ctx.moveTo(vx, vy + 17); ctx.lineTo(vx, vy + 24);
+            ctx.moveTo(vx - 20, vy); ctx.lineTo(vx - 15, vy);
+            ctx.moveTo(vx + 15, vy); ctx.lineTo(vx + 20, vy);
+            ctx.moveTo(vx, vy - 20); ctx.lineTo(vx, vy - 15);
+            ctx.moveTo(vx, vy + 15); ctx.lineTo(vx, vy + 20);
             ctx.stroke();
           }
 
           // Ambient Glow
           ctx.beginPath();
-          ctx.arc(vx, vy, isOnScene ? 15 : 12, 0, Math.PI * 2);
+          ctx.arc(vx, vy, isOnScene ? 14 : 10, 0, Math.PI * 2);
           ctx.fillStyle = isOnScene 
-            ? 'rgba(239, 68, 68, 0.45)' 
+            ? 'rgba(239, 68, 68, 0.4)' 
             : isAmbulance 
-              ? 'rgba(6, 182, 212, 0.35)' 
-              : 'rgba(249, 115, 22, 0.35)';
+              ? 'rgba(6, 182, 212, 0.3)' 
+              : 'rgba(249, 115, 22, 0.3)';
           ctx.fill();
 
           // Distinct Sprites
           if (isAmbulance) {
             ctx.beginPath();
-            ctx.arc(vx, vy, 8.5, 0, Math.PI * 2);
+            ctx.arc(vx, vy, 8.0, 0, Math.PI * 2);
             ctx.fillStyle = '#06b6d4';
             ctx.fill();
-            ctx.strokeStyle = '#e0f2fe';
-            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.2;
             ctx.stroke();
 
+            // White medical cross
             ctx.fillStyle = '#ffffff';
-            ctx.fillRect(vx - 1.5, vy - 4.5, 3, 9);
-            ctx.fillRect(vx - 4.5, vy - 1.5, 9, 3);
+            ctx.fillRect(vx - 1.2, vy - 4, 2.4, 8);
+            ctx.fillRect(vx - 4, vy - 1.2, 8, 2.4);
           } else {
-            ctx.fillStyle = '#ea580c';
+            // Fire Engine Chevron Shield
+            ctx.save();
+            ctx.translate(vx, vy);
+            ctx.fillStyle = '#f97316';
             ctx.beginPath();
-            const r = 3;
-            const x = vx - 8.5;
-            const y = vy - 8.5;
-            const w = 17;
-            const h = 17;
-            ctx.moveTo(x + r, y);
-            ctx.arcTo(x + w, y, x + w, y + h, r);
-            ctx.arcTo(x + w, y + h, x, y + h, r);
-            ctx.arcTo(x, y + h, x, y, r);
-            ctx.arcTo(x, y, x + w, y, r);
+            ctx.moveTo(0, -8);
+            ctx.lineTo(7, -2);
+            ctx.lineTo(5, 7);
+            ctx.lineTo(0, 9);
+            ctx.lineTo(-5, 7);
+            ctx.lineTo(-7, -2);
             ctx.closePath();
             ctx.fill();
-            ctx.strokeStyle = '#fed7aa';
-            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.2;
             ctx.stroke();
 
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 9px JetBrains Mono';
-            ctx.textAlign = 'center';
-            ctx.fillText('F', vx, vy + 3);
+            // Inner flame accent
+            ctx.fillStyle = '#fde047';
+            ctx.beginPath();
+            ctx.arc(0, 1, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
           }
 
-          // Directional Heading Indicator
+          // Heading Arrow for in-motion units
           if (v.state === 'EN_ROUTE_INCIDENT' || v.state === 'TRANSPORTING_HOSPITAL' || v.state === 'RETURNING_TO_BASE') {
             const headingScreen = -currentPos.heading;
-            const arrowDist = 14;
-            const ax = (vx + Math.cos(headingScreen) * arrowDist) | 0;
-            const ay = (vy + Math.sin(headingScreen) * arrowDist) | 0;
+            const ax = vx + Math.cos(headingScreen) * 13;
+            const ay = vy + Math.sin(headingScreen) * 13;
 
             ctx.beginPath();
             ctx.moveTo(ax, ay);
             ctx.lineTo(
-              (ax - Math.cos(headingScreen - 0.45) * 6.5) | 0,
-              (ay - Math.sin(headingScreen - 0.45) * 6.5) | 0
+              (ax - Math.cos(headingScreen - 0.45) * 6) | 0,
+              (ay - Math.sin(headingScreen - 0.45) * 6) | 0
             );
             ctx.lineTo(
-              (ax - Math.cos(headingScreen + 0.45) * 6.5) | 0,
-              (ay - Math.sin(headingScreen + 0.45) * 6.5) | 0
+              (ax - Math.cos(headingScreen + 0.45) * 6) | 0,
+              (ay - Math.sin(headingScreen + 0.45) * 6) | 0
             );
             ctx.closePath();
             ctx.fillStyle = isAmbulance ? '#22d3ee' : '#fb923c';
             ctx.fill();
           }
 
-          // State Pill Badge
-          const stateText = v.state === 'IDLE_STATION' ? 'IDLE' :
-                            v.state === 'EN_ROUTE_INCIDENT' ? (v.isStagedAtPerimeter ? 'EN ROUTE STAGING' : 'EN ROUTE') :
-                            v.state === 'ON_SCENE' ? `SCENE ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
-                            v.state === 'TRANSPORTING_HOSPITAL' ? 'TRANS' :
-                            v.state === 'AT_HOSPITAL_TURNOVER' ? `TURNOVER ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
-                            v.state === 'RETURNING_TO_BASE' ? 'RTB' :
-                            v.state === 'REFUELING_DEPOT' ? `FUEL ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
-                            v.state === 'REPLENISHING_WATER' ? `WATER ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
-                            v.state === 'SEEKING_RESUPPLY' ? 'RESUPPLY' :
-                            v.state === 'STAGED_AT_PERIMETER' ? 'STAGING AT BLOCKAGE' :
-                            v.state === 'DIVERTED_CLINIC' ? 'DIVERT' : v.state;
+          // Semantic LOD for Vehicle ID and Status Pill
+          // Only show labels if:
+          // 1. Vehicle is in motion/active (state != IDLE_STATION)
+          // 2. Or vehicle is focused/hovered
+          // 3. Or zoom >= 1.4
+          const shouldShowVehicleLabel = !isIdleAtBase || isFocused || isHovered || curZoom >= 1.4;
 
-          let badgeBorderColor = 'rgba(16, 185, 129, 0.4)';
-          let badgeTextColor = '#34d399';
-          if (v.state === 'ON_SCENE') {
-            badgeBorderColor = 'rgba(239, 68, 68, 0.5)';
-            badgeTextColor = '#f87171';
-          } else if (v.state === 'EN_ROUTE_INCIDENT') {
-            badgeBorderColor = v.isStagedAtPerimeter ? 'rgba(245, 158, 11, 0.6)' : 'rgba(56, 189, 248, 0.5)';
-            badgeTextColor = v.isStagedAtPerimeter ? '#fbbf24' : '#38bdf8';
-          } else if (v.state === 'STAGED_AT_PERIMETER') {
-            badgeBorderColor = 'rgba(245, 158, 11, 0.85)';
-            badgeTextColor = '#fbbf24';
-          } else if (v.state === 'TRANSPORTING_HOSPITAL') {
-            badgeBorderColor = 'rgba(192, 132, 252, 0.5)';
-            badgeTextColor = '#c084fc';
-          } else if (v.state === 'RETURNING_TO_BASE') {
-            badgeBorderColor = 'rgba(45, 212, 191, 0.5)';
-            badgeTextColor = '#2dd4bf';
-          } else if (v.state === 'REFUELING_DEPOT' || v.state === 'REPLENISHING_WATER') {
-            badgeBorderColor = 'rgba(59, 130, 246, 0.5)';
-            badgeTextColor = '#60a5fa';
-          } else if (v.state === 'SEEKING_RESUPPLY') {
-            badgeBorderColor = 'rgba(245, 158, 11, 0.6)';
-            badgeTextColor = '#fbbf24';
+          if (shouldShowVehicleLabel && curZoom >= 0.75) {
+            // Vehicle ID Tag
+            ctx.font = 'bold 8px JetBrains Mono';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = isFocused ? '#38bdf8' : '#e2e8f0';
+            ctx.fillText(v.id, vx, vy + 10);
+            ctx.textBaseline = 'alphabetic';
+
+            // State Pill Badge
+            const stateText = v.state === 'IDLE_STATION' ? 'IDLE' :
+                              v.state === 'EN_ROUTE_INCIDENT' ? (v.isStagedAtPerimeter ? 'EN ROUTE STAGING' : 'EN ROUTE') :
+                              v.state === 'ON_SCENE' ? `SCENE ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
+                              v.state === 'TRANSPORTING_HOSPITAL' ? 'TRANS' :
+                              v.state === 'AT_HOSPITAL_TURNOVER' ? `TURNOVER ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
+                              v.state === 'RETURNING_TO_BASE' ? 'RTB' :
+                              v.state === 'REFUELING_DEPOT' ? `FUEL ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
+                              v.state === 'REPLENISHING_WATER' ? `WATER ${(v.stateTimerMinutes ?? 0).toFixed(0)}m` :
+                              v.state === 'SEEKING_RESUPPLY' ? 'RESUPPLY' :
+                              v.state === 'STAGED_AT_PERIMETER' ? 'STAGING AT BLOCKAGE' :
+                              v.state === 'DIVERTED_CLINIC' ? 'DIVERT' : v.state;
+
+            let badgeBorderColor = 'rgba(16, 185, 129, 0.4)';
+            let badgeTextColor = '#34d399';
+            if (v.state === 'ON_SCENE') {
+              badgeBorderColor = 'rgba(239, 68, 68, 0.5)';
+              badgeTextColor = '#f87171';
+            } else if (v.state === 'EN_ROUTE_INCIDENT') {
+              badgeBorderColor = v.isStagedAtPerimeter ? 'rgba(245, 158, 11, 0.6)' : 'rgba(56, 189, 248, 0.5)';
+              badgeTextColor = v.isStagedAtPerimeter ? '#fbbf24' : '#38bdf8';
+            } else if (v.state === 'STAGED_AT_PERIMETER') {
+              badgeBorderColor = 'rgba(245, 158, 11, 0.85)';
+              badgeTextColor = '#fbbf24';
+            } else if (v.state === 'TRANSPORTING_HOSPITAL') {
+              badgeBorderColor = 'rgba(192, 132, 252, 0.5)';
+              badgeTextColor = '#c084fc';
+            } else if (v.state === 'RETURNING_TO_BASE') {
+              badgeBorderColor = 'rgba(45, 212, 191, 0.5)';
+              badgeTextColor = '#2dd4bf';
+            } else if (v.state === 'REFUELING_DEPOT' || v.state === 'REPLENISHING_WATER') {
+              badgeBorderColor = 'rgba(59, 130, 246, 0.5)';
+              badgeTextColor = '#60a5fa';
+            } else if (v.state === 'SEEKING_RESUPPLY') {
+              badgeBorderColor = 'rgba(245, 158, 11, 0.6)';
+              badgeTextColor = '#fbbf24';
+            }
+
+            ctx.font = '7.5px JetBrains Mono';
+            const textWidth = ctx.measureText(stateText).width;
+            const pillW = Math.round(textWidth + 6);
+            const pillH = 11;
+            const pillX = Math.round(vx - pillW * 0.5);
+            const pillY = Math.round(vy - 11 - pillH);
+
+            ctx.fillStyle = 'rgba(11, 17, 32, 0.92)';
+            ctx.fillRect(pillX, pillY, pillW, pillH);
+            ctx.strokeStyle = badgeBorderColor;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(pillX, pillY, pillW, pillH);
+
+            ctx.fillStyle = badgeTextColor;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(stateText, vx, pillY + pillH * 0.5);
+            ctx.textBaseline = 'alphabetic';
           }
 
-          ctx.font = '8px JetBrains Mono';
-          const textWidth = ctx.measureText(stateText).width;
-          const pillW = Math.round(textWidth + 6);
-          const pillH = 12;
-          const pillX = Math.round(vx - pillW * 0.5);
-          const pillY = Math.round(vy - 14 - pillH);
-
-          ctx.fillStyle = 'rgba(11, 17, 32, 0.9)';
-          ctx.fillRect(pillX, pillY, pillW, pillH);
-          ctx.strokeStyle = badgeBorderColor;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(pillX, pillY, pillW, pillH);
-
-          ctx.fillStyle = badgeTextColor;
-          ctx.textAlign = 'center';
-          ctx.fillText(stateText, Math.round(vx), Math.round(pillY + 9));
-
-          // Vehicle ID Tag
-          ctx.fillStyle = '#f8fafc';
-          ctx.font = 'bold 8.5px JetBrains Mono';
-          ctx.fillText(v.id, Math.round(vx), Math.round(vy + 16));
-          ctx.textAlign = 'left';
-
-          // Resource Arc Gauges (concentric arcs around vehicle)
-          const fuelPct = v.fuelPercentage ?? 100;
-          const waterPct = v.waterPercentage ?? (isAmbulance ? null : 100);
-
-          // Outer arc: Fuel
-          const fuelAngle = (fuelPct / 100) * Math.PI * 2;
-          ctx.beginPath();
-          ctx.arc(vx, vy, 13, -Math.PI / 2, -Math.PI / 2 + fuelAngle, false);
-          ctx.strokeStyle = fuelPct > 50 ? 'rgba(52, 211, 153, 0.7)' : (fuelPct > 20 ? 'rgba(251, 191, 36, 0.8)' : '#ef4444');
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          // Inner arc: Water (fire engines only)
-          if (!isAmbulance && waterPct != null) {
-            const waterAngle = (waterPct / 100) * Math.PI * 2;
+          // Resource gauges (render when zoomed in >= 1.0 or active/hovered)
+          if (curZoom >= 1.0 || isFocused || isHovered) {
+            const fuelPct = typeof v.fuelPercentage === 'number' ? v.fuelPercentage : (parseFloat(v.fuelPercentage) || 100);
+            const fuelAngle = (fuelPct / 100) * Math.PI * 2;
             ctx.beginPath();
-            ctx.arc(vx, vy, 15.5, -Math.PI / 2, -Math.PI / 2 + waterAngle, false);
-            ctx.strokeStyle = waterPct > 20 ? 'rgba(34, 211, 238, 0.6)' : '#f97316';
-            ctx.lineWidth = 1.8;
+            ctx.arc(vx, vy, 12.5, -Math.PI / 2, -Math.PI / 2 + fuelAngle, false);
+            ctx.strokeStyle = fuelPct > 20 ? 'rgba(74, 222, 128, 0.6)' : '#ef4444';
+            ctx.lineWidth = 1.5;
             ctx.stroke();
+
+            const waterPct = v.waterPercentage != null ? (typeof v.waterPercentage === 'number' ? v.waterPercentage : parseFloat(v.waterPercentage)) : null;
+            if (!isAmbulance && waterPct != null && !isNaN(waterPct)) {
+              const waterAngle = (waterPct / 100) * Math.PI * 2;
+              ctx.beginPath();
+              ctx.arc(vx, vy, 15.0, -Math.PI / 2, -Math.PI / 2 + waterAngle, false);
+              ctx.strokeStyle = waterPct > 20 ? 'rgba(34, 211, 238, 0.6)' : '#f97316';
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+            }
           }
 
-          // Low Resource Warning Badges
-          if (fuelPct <= 20) {
-            const warningTxt = '⛽';
-            ctx.font = '10px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(warningTxt, vx + 14, vy - 12);
-          }
-          if (!isAmbulance && waterPct != null && waterPct <= 20) {
-            const warningTxt = '💧';
-            ctx.font = '10px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(warningTxt, vx - 14, vy - 12);
-          }
           ctx.textAlign = 'left';
         }
       }
@@ -887,31 +932,84 @@ function MapCanvasComponent({
     };
   }, [telemetry, selectedSegment, focusedVehicleId, renderStaticBackground, showZones, showNodeLabels, showTrails, showCongestion]);
 
-  // Mouse wheel zoom handler
+  // Smooth, Exponential Damped Mouse Wheel Zoom Handler with Cursor Anchor
   const handleWheel = (e) => {
     e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
-    setZoom((prev) => {
-      const next = Math.max(0.7, Math.min(3.5, prev * zoomFactor));
-      return parseFloat(next.toFixed(2));
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const zoomFactor = Math.exp(-e.deltaY * 0.0015);
+
+    setZoom((prevZoom) => {
+      const newScale = Math.min(Math.max(prevZoom * zoomFactor, 0.4), 4.0);
+      const canvasCenterX = canvas.width / 2;
+      const canvasCenterY = canvas.height / 2;
+      const scaleRatio = newScale / prevZoom;
+
+      setPan((prevPan) => ({
+        x: (mouseX - canvasCenterX) * (1 - scaleRatio) + prevPan.x * scaleRatio,
+        y: (mouseY - canvasCenterY) * (1 - scaleRatio) + prevPan.y * scaleRatio
+      }));
+      return parseFloat(newScale.toFixed(3));
     });
   };
 
-  // Mouse drag pan handlers
+  // Mouse Drag Pan Handlers
   const handleMouseDown = (e) => {
-    // Only drag with left mouse button if holding Shift or middle click, or right click
-    if (e.button === 1 || e.shiftKey) {
-      isDraggingRef.current = true;
-      dragStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
-    }
+    isDraggingRef.current = true;
+    didDragRef.current = false;
+    dragStartRef.current = { x: e.clientX - panRef.current.x, y: e.clientY - panRef.current.y };
   };
 
   const handleMouseMove = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
     if (isDraggingRef.current) {
-      setPan({
-        x: e.clientX - dragStartRef.current.x,
-        y: e.clientY - dragStartRef.current.y
-      });
+      const curX = e.clientX - dragStartRef.current.x;
+      const curY = e.clientY - dragStartRef.current.y;
+      const dx = Math.abs(curX - panRef.current.x);
+      const dy = Math.abs(curY - panRef.current.y);
+      if (dx > 2 || dy > 2) {
+        didDragRef.current = true;
+      }
+      setPan({ x: curX, y: curY });
+    }
+
+    // Hover detection for vehicles
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const width = canvas.width;
+    const height = canvas.height;
+    const curZoom = zoomRef.current;
+    const curPan = panRef.current;
+
+    const canvasCenterX = width / 2;
+    const canvasCenterY = height / 2;
+    const transformedX = (px - (canvasCenterX + curPan.x)) / curZoom + canvasCenterX;
+    const transformedY = (py - (canvasCenterY + curPan.y)) / curZoom + canvasCenterY;
+
+    if (telemetry?.fleet && Array.isArray(telemetry.fleet)) {
+      let foundVid = null;
+      for (const v of telemetry.fleet) {
+        if (!v) continue;
+        const vxVal = typeof v.x === 'number' ? v.x : parseFloat(v.x);
+        const vyVal = typeof v.y === 'number' ? v.y : parseFloat(v.y);
+        if (isNaN(vxVal) || isNaN(vyVal)) continue;
+
+        const vx = PADDING + ((vxVal - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
+        const vy = height - (PADDING + ((vyVal - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
+        if (Math.hypot(transformedX - vx, transformedY - vy) <= 18) {
+          foundVid = v.id;
+          break;
+        }
+      }
+      setHoveredVehicleId(foundVid);
     }
   };
 
@@ -921,7 +1019,11 @@ function MapCanvasComponent({
 
   // Click handler to select road segments, vehicles, or trigger incidents
   const handleCanvasClick = (e) => {
-    if (isDraggingRef.current) return;
+    if (didDragRef.current) {
+      didDragRef.current = false;
+      return;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas || !telemetry?.network) return;
 
@@ -932,7 +1034,6 @@ function MapCanvasComponent({
     const width = canvas.width;
     const height = canvas.height;
 
-    // Apply inverse pan & zoom transform to click coordinate
     const curZoom = zoomRef.current;
     const curPan = panRef.current;
 
@@ -1019,7 +1120,7 @@ function MapCanvasComponent({
 
   return (
     <div 
-      className="relative w-full rounded-xl overflow-hidden glass-panel"
+      className="relative w-full rounded-xl overflow-hidden glass-panel select-none"
       style={{
         border: '1px solid rgba(59, 130, 246, 0.25)',
         boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.8)'
@@ -1035,7 +1136,7 @@ function MapCanvasComponent({
         width={960}
         height={620}
         onClick={handleCanvasClick}
-        className="w-full h-full block cursor-crosshair"
+        className="w-full h-full block cursor-grab active:cursor-grabbing"
         style={{ display: 'block', background: '#080c14' }}
       />
 
@@ -1081,7 +1182,7 @@ function MapCanvasComponent({
         }}
       >
         <button
-          onClick={() => setZoom(z => Math.min(3.5, parseFloat((z + 0.2).toFixed(2))))}
+          onClick={() => setZoom(z => Math.min(4.0, parseFloat((z * 1.2).toFixed(2))))}
           className="p-1.5 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
           title="Zoom In"
         >
@@ -1089,7 +1190,7 @@ function MapCanvasComponent({
         </button>
 
         <button
-          onClick={() => setZoom(z => Math.max(0.7, parseFloat((z - 0.2).toFixed(2))))}
+          onClick={() => setZoom(z => Math.max(0.4, parseFloat((z / 1.2).toFixed(2))))}
           className="p-1.5 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
           title="Zoom Out"
         >
@@ -1099,7 +1200,7 @@ function MapCanvasComponent({
         <button
           onClick={handleResetView}
           className="p-1.5 rounded text-slate-300 hover:text-sky-400 hover:bg-slate-800 transition-all"
-          title="Reset Zoom & Pan (Z)"
+          title="Reset Zoom & Pan (100%)"
         >
           <Maximize2 className="w-4 h-4" />
         </button>
