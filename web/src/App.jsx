@@ -209,10 +209,21 @@ export default function App() {
 
   const handleCreateIncident = useCallback(async (incidentData) => {
     try {
+      const clampedX = Math.max(0.5, Math.min(24.5, parseFloat(incidentData.x) || 5.0));
+      const clampedY = Math.max(0.5, Math.min(24.5, parseFloat(incidentData.y) || 5.0));
+      if (clampedX !== incidentData.x || clampedY !== incidentData.y) {
+        addToast('INFO', 'COORDINATES SNAPPED', 'Coordinates out of operational perimeter; snapped to 25km boundary.');
+      }
+      const payload = {
+        ...incidentData,
+        x: clampedX,
+        y: clampedY
+      };
+
       await fetch('/api/incident', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(incidentData)
+        body: JSON.stringify(payload)
       });
       const res = await fetch('/api/state');
       if (res.ok) {
@@ -226,9 +237,14 @@ export default function App() {
   }, [addToast]);
 
   const handleMapClick = useCallback((x, y) => {
-    setClickedCoords({ x, y });
+    const clampedX = Math.max(0.5, Math.min(24.5, x));
+    const clampedY = Math.max(0.5, Math.min(24.5, y));
+    if (clampedX !== x || clampedY !== y) {
+      addToast('INFO', 'COORDINATES SNAPPED', 'Coordinates out of operational perimeter; snapped to 25km boundary.');
+    }
+    setClickedCoords({ x: parseFloat(clampedX.toFixed(1)), y: parseFloat(clampedY.toFixed(1)) });
     setActiveTab('incidents');
-  }, []);
+  }, [addToast]);
 
   const handleSelectSegment = useCallback((segment) => {
     setSelectedSegment(segment);

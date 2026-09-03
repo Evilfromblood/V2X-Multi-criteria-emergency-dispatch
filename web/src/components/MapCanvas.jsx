@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 const PADDING = 60;
-const WORLD_SIZE = 13.0; // km
+const WORLD_SIZE = 25.0; // 25km Metropolitan Grid scale
 
 function MapCanvasComponent({ 
   telemetry, 
@@ -44,16 +44,16 @@ function MapCanvasComponent({
     offscreenDirtyRef.current = true;
   }, [telemetry?.network?.segments, telemetry?.hazards]);
 
-  // 1. LAYER 1: Pre-render static background (tactical grid, node markers, zones, static roads)
+  // 1. LAYER 1: Pre-render static background (tactical 25km grid, sector zones, node markers, roads)
   const renderStaticBackground = useCallback((offscreenCtx, width, height) => {
     // Fill deep tactical canvas
     offscreenCtx.fillStyle = '#080c14';
     offscreenCtx.fillRect(0, 0, width, height);
 
-    // Tactical Coordinate Grid
+    // Tactical 25km Coordinate Grid
     offscreenCtx.strokeStyle = 'rgba(30, 41, 59, 0.45)';
     offscreenCtx.lineWidth = 1;
-    const gridStep = 45;
+    const gridStep = 40;
 
     for (let x = 0; x <= width; x += gridStep) {
       offscreenCtx.beginPath();
@@ -68,10 +68,12 @@ function MapCanvasComponent({
       offscreenCtx.stroke();
     }
 
-    // Coordinate tick labels on edges (integer-aligned)
+    // Coordinate tick labels on edges (2km to 25km, integer-aligned)
     offscreenCtx.fillStyle = '#475569';
     offscreenCtx.font = '9px JetBrains Mono';
-    for (let km = 1; km <= 13; km += 2) {
+    const tickKms = [2, 5, 10, 15, 20, 25];
+    for (let i = 0; i < tickKms.length; ++i) {
+      const km = tickKms[i];
       const sx = (PADDING + ((km - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
       const sy = (height - (PADDING + ((km - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
       offscreenCtx.fillText(`${km}km`, sx - 10, height - 12);
@@ -80,39 +82,81 @@ function MapCanvasComponent({
 
     const nodeMap = nodeMapRef.current;
 
-    // Tactical Zone Callouts (Hospital Trauma Perimeter & Base HQ Perimeter)
+    // Tactical Sector Zone Callouts
     nodeMap.forEach((n) => {
       const sx = (PADDING + ((n.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
       const sy = (height - (PADDING + ((n.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
 
-      if (n.type === 'HOSPITAL') {
+      if (n.id === 'N11_HOSPITAL') {
         offscreenCtx.beginPath();
-        offscreenCtx.arc(sx, sy, 65, 0, Math.PI * 2);
+        offscreenCtx.arc(sx, sy, 48, 0, Math.PI * 2);
         offscreenCtx.fillStyle = 'rgba(13, 148, 136, 0.08)';
         offscreenCtx.fill();
-        offscreenCtx.strokeStyle = 'rgba(20, 184, 166, 0.35)';
+        offscreenCtx.strokeStyle = 'rgba(20, 184, 166, 0.4)';
         offscreenCtx.lineWidth = 1.5;
         offscreenCtx.setLineDash([4, 4]);
         offscreenCtx.stroke();
         offscreenCtx.setLineDash([]);
 
-        offscreenCtx.fillStyle = 'rgba(45, 212, 191, 0.7)';
-        offscreenCtx.font = 'bold 9px JetBrains Mono';
-        offscreenCtx.fillText('CENTRAL HOSPITAL TRAUMA ZONE', sx - 85, sy - 72);
-      } else if (n.type === 'STATION') {
+        offscreenCtx.fillStyle = 'rgba(45, 212, 191, 0.8)';
+        offscreenCtx.font = 'bold 8px JetBrains Mono';
+        offscreenCtx.fillText('METRO TRAUMA CENTER', sx - 50, sy - 54);
+      } else if (n.id === 'N21_CLINIC') {
         offscreenCtx.beginPath();
-        offscreenCtx.arc(sx, sy, 52, 0, Math.PI * 2);
+        offscreenCtx.arc(sx, sy, 42, 0, Math.PI * 2);
+        offscreenCtx.fillStyle = 'rgba(13, 148, 136, 0.08)';
+        offscreenCtx.fill();
+        offscreenCtx.strokeStyle = 'rgba(20, 184, 166, 0.4)';
+        offscreenCtx.lineWidth = 1.5;
+        offscreenCtx.setLineDash([4, 4]);
+        offscreenCtx.stroke();
+        offscreenCtx.setLineDash([]);
+
+        offscreenCtx.fillStyle = 'rgba(45, 212, 191, 0.8)';
+        offscreenCtx.font = 'bold 8px JetBrains Mono';
+        offscreenCtx.fillText('EAST COMMUNITY CLINIC', sx - 54, sy - 48);
+      } else if (n.id === 'N1_HQ') {
+        offscreenCtx.beginPath();
+        offscreenCtx.arc(sx, sy, 45, 0, Math.PI * 2);
         offscreenCtx.fillStyle = 'rgba(37, 99, 235, 0.08)';
         offscreenCtx.fill();
-        offscreenCtx.strokeStyle = 'rgba(59, 130, 246, 0.35)';
+        offscreenCtx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
         offscreenCtx.lineWidth = 1.5;
         offscreenCtx.setLineDash([4, 4]);
         offscreenCtx.stroke();
         offscreenCtx.setLineDash([]);
 
-        offscreenCtx.fillStyle = 'rgba(96, 165, 250, 0.7)';
-        offscreenCtx.font = 'bold 9px JetBrains Mono';
-        offscreenCtx.fillText('HQ DISPATCH DEPOT', sx - 54, sy - 58);
+        offscreenCtx.fillStyle = 'rgba(96, 165, 250, 0.8)';
+        offscreenCtx.font = 'bold 8px JetBrains Mono';
+        offscreenCtx.fillText('HQ DISPATCH DEPOT', sx - 45, sy - 50);
+      } else if (n.id === 'N17_LOGISTICS') {
+        offscreenCtx.beginPath();
+        offscreenCtx.arc(sx, sy, 42, 0, Math.PI * 2);
+        offscreenCtx.fillStyle = 'rgba(245, 158, 11, 0.08)';
+        offscreenCtx.fill();
+        offscreenCtx.strokeStyle = 'rgba(245, 158, 11, 0.35)';
+        offscreenCtx.lineWidth = 1.5;
+        offscreenCtx.setLineDash([4, 4]);
+        offscreenCtx.stroke();
+        offscreenCtx.setLineDash([]);
+
+        offscreenCtx.fillStyle = 'rgba(251, 191, 36, 0.8)';
+        offscreenCtx.font = 'bold 8px JetBrains Mono';
+        offscreenCtx.fillText('LOGISTICS HUB & TANKERS', sx - 56, sy - 48);
+      } else if (n.id === 'N26_AIRPORT_DEPOT') {
+        offscreenCtx.beginPath();
+        offscreenCtx.arc(sx, sy, 40, 0, Math.PI * 2);
+        offscreenCtx.fillStyle = 'rgba(168, 85, 247, 0.08)';
+        offscreenCtx.fill();
+        offscreenCtx.strokeStyle = 'rgba(168, 85, 247, 0.35)';
+        offscreenCtx.lineWidth = 1.5;
+        offscreenCtx.setLineDash([4, 4]);
+        offscreenCtx.stroke();
+        offscreenCtx.setLineDash([]);
+
+        offscreenCtx.fillStyle = 'rgba(192, 132, 252, 0.8)';
+        offscreenCtx.font = 'bold 8px JetBrains Mono';
+        offscreenCtx.fillText('AIRPORT CRASH-RESCUE BASE', sx - 64, sy - 45);
       }
     });
 
@@ -132,56 +176,55 @@ function MapCanvasComponent({
         offscreenCtx.moveTo(x1, y1);
         offscreenCtx.lineTo(x2, y2);
         offscreenCtx.strokeStyle = 'rgba(51, 65, 85, 0.65)';
-        offscreenCtx.lineWidth = 2.5;
+        offscreenCtx.lineWidth = 2.0;
         offscreenCtx.stroke();
       });
     }
 
-    // Intersections (Nodes) with Anti-Collision Layout
+    // Intersections (32 Nodes) with Anti-Collision Layout
     nodeMap.forEach((n) => {
       const sx = (PADDING + ((n.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
       const sy = (height - (PADDING + ((n.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
 
       offscreenCtx.beginPath();
       if (n.type === 'HOSPITAL') {
-        offscreenCtx.arc(sx, sy, 11, 0, Math.PI * 2);
+        offscreenCtx.arc(sx, sy, 8, 0, Math.PI * 2);
         offscreenCtx.fillStyle = '#0f766e';
         offscreenCtx.fill();
         offscreenCtx.strokeStyle = '#14b8a6';
-        offscreenCtx.lineWidth = 2.5;
+        offscreenCtx.lineWidth = 2;
         offscreenCtx.stroke();
 
         // Medical Cross
         offscreenCtx.fillStyle = '#ffffff';
-        offscreenCtx.fillRect(sx - 1.5, sy - 6, 3, 12);
-        offscreenCtx.fillRect(sx - 6, sy - 1.5, 12, 3);
+        offscreenCtx.fillRect(sx - 1.5, sy - 5, 3, 10);
+        offscreenCtx.fillRect(sx - 5, sy - 1.5, 10, 3);
       } else if (n.type === 'STATION') {
-        offscreenCtx.arc(sx, sy, 10, 0, Math.PI * 2);
+        offscreenCtx.arc(sx, sy, 8, 0, Math.PI * 2);
         offscreenCtx.fillStyle = '#1e3a8a';
         offscreenCtx.fill();
         offscreenCtx.strokeStyle = '#3b82f6';
-        offscreenCtx.lineWidth = 2.5;
+        offscreenCtx.lineWidth = 2;
         offscreenCtx.stroke();
 
         offscreenCtx.fillStyle = '#ffffff';
-        offscreenCtx.font = 'bold 8px JetBrains Mono';
+        offscreenCtx.font = 'bold 7px JetBrains Mono';
         offscreenCtx.textAlign = 'center';
-        offscreenCtx.fillText('HQ', sx, sy + 3);
+        offscreenCtx.fillText('BASE', sx, sy + 2.5);
       } else {
-        offscreenCtx.arc(sx, sy, 5.5, 0, Math.PI * 2);
+        offscreenCtx.arc(sx, sy, 4.5, 0, Math.PI * 2);
         offscreenCtx.fillStyle = '#1e293b';
         offscreenCtx.fill();
         offscreenCtx.strokeStyle = '#64748b';
-        offscreenCtx.lineWidth = 1.5;
+        offscreenCtx.lineWidth = 1.2;
         offscreenCtx.stroke();
       }
 
       // Explicit Layout Offset: Node label is anchored 14px below-left of node circle
-      // to eliminate collisions with vehicle sprites and state pills!
       offscreenCtx.fillStyle = '#64748b';
-      offscreenCtx.font = '9px JetBrains Mono';
+      offscreenCtx.font = '8px JetBrains Mono';
       offscreenCtx.textAlign = 'right';
-      offscreenCtx.fillText(n.id, sx - 12, sy + 16);
+      offscreenCtx.fillText(n.id, sx - 10, sy + 14);
       offscreenCtx.textAlign = 'left';
     });
   }, [telemetry?.network]);
@@ -241,7 +284,7 @@ function MapCanvasComponent({
              (selectedSegment.from === seg.to && selectedSegment.to === seg.from));
 
           if (!seg.isBlocked && seg.congestionMultiplier <= 1.5 && !isSelected) {
-            continue; // Normal road already in background!
+            continue; // Normal road already in background
           }
 
           const from = nodeMap.get(seg.from);
@@ -259,8 +302,8 @@ function MapCanvasComponent({
 
           if (seg.isBlocked) {
             ctx.strokeStyle = '#ef4444';
-            ctx.lineWidth = isSelected ? 6 : 4;
-            ctx.setLineDash([10, 6]);
+            ctx.lineWidth = isSelected ? 5 : 3.5;
+            ctx.setLineDash([8, 5]);
             ctx.stroke();
             ctx.setLineDash([]);
 
@@ -269,44 +312,44 @@ function MapCanvasComponent({
             const my = ((y1 + y2) * 0.5) | 0;
 
             ctx.beginPath();
-            ctx.arc(mx, my, 10, 0, Math.PI * 2);
+            ctx.arc(mx, my, 8, 0, Math.PI * 2);
             ctx.fillStyle = '#dc2626';
             ctx.fill();
             ctx.strokeStyle = '#fca5a5';
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 1.2;
             ctx.stroke();
 
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 10px monospace';
+            ctx.font = 'bold 9px monospace';
             ctx.textAlign = 'center';
-            ctx.fillText('✕', mx, my + 3.5);
+            ctx.fillText('✕', mx, my + 3);
             ctx.textAlign = 'left';
 
             // Pulsing warning ring
             ctx.beginPath();
-            ctx.arc(mx, my, 10 + tPulse * 8, 0, Math.PI * 2);
+            ctx.arc(mx, my, 8 + tPulse * 7, 0, Math.PI * 2);
             ctx.strokeStyle = `rgba(239, 68, 68, ${1 - tPulse})`;
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 1.2;
             ctx.stroke();
           } else if (seg.congestionMultiplier > 1.5) {
             ctx.strokeStyle = '#f59e0b';
-            ctx.lineWidth = isSelected ? 6 : 3.5;
+            ctx.lineWidth = isSelected ? 5 : 3;
             ctx.stroke();
 
             const mx = ((x1 + x2) * 0.5) | 0;
             const my = ((y1 + y2) * 0.5) | 0;
             ctx.beginPath();
-            ctx.arc(mx, my, 7, 0, Math.PI * 2);
+            ctx.arc(mx, my, 6, 0, Math.PI * 2);
             ctx.fillStyle = '#f59e0b';
             ctx.fill();
             ctx.fillStyle = '#000000';
-            ctx.font = 'bold 8px JetBrains Mono';
+            ctx.font = 'bold 7px JetBrains Mono';
             ctx.textAlign = 'center';
-            ctx.fillText(`x${seg.congestionMultiplier.toFixed(1)}`, mx, my + 2.5);
+            ctx.fillText(`x${seg.congestionMultiplier.toFixed(1)}`, mx, my + 2);
             ctx.textAlign = 'left';
           } else if (isSelected) {
             ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 5;
+            ctx.lineWidth = 4;
             ctx.stroke();
           }
         }
@@ -340,7 +383,7 @@ function MapCanvasComponent({
             ctx.strokeStyle = isAmbulance 
               ? (isFocused ? 'rgba(6, 182, 212, 0.95)' : 'rgba(6, 182, 212, 0.5)')
               : (isFocused ? 'rgba(249, 115, 22, 0.95)' : 'rgba(249, 115, 22, 0.5)');
-            ctx.lineWidth = isFocused ? 5 : 3.5;
+            ctx.lineWidth = isFocused ? 4.5 : 3.0;
             ctx.setLineDash([8, 8]);
             ctx.lineDashOffset = -animOffsetRef.current * 0.8;
             ctx.stroke();
@@ -351,7 +394,7 @@ function MapCanvasComponent({
         }
       }
 
-      // 4. Dynamic Active Emergency Incidents (Radar Rings)
+      // 4. Dynamic Active Emergency Incidents (Radar Rings & Off-Grid Approach Paths)
       if (telemetry?.incidents) {
         const incidents = telemetry.incidents;
         for (let i = 0; i < incidents.length; ++i) {
@@ -362,22 +405,57 @@ function MapCanvasComponent({
           const iy = (height - (PADDING + ((inc.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
           const isHighSeverity = inc.severity >= 4;
 
+          // Off-Grid First/Last-Mile Transit Line from nearest road intersection
+          if (inc.nearestNodeId) {
+            const nearest = nodeMap.get(inc.nearestNodeId);
+            if (nearest) {
+              const nx = (PADDING + ((nearest.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
+              const ny = (height - (PADDING + ((nearest.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
+              const offRoadDist = Math.hypot(ix - nx, iy - ny);
+
+              if (offRoadDist > 8) {
+                ctx.beginPath();
+                ctx.moveTo(nx, ny);
+                ctx.lineTo(ix, iy);
+                ctx.strokeStyle = 'rgba(251, 146, 60, 0.6)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Off-road approach badge tag
+                const mx = ((nx + ix) * 0.5) | 0;
+                const my = ((ny + iy) * 0.5) | 0;
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.fillRect(mx - 24, my - 7, 48, 14);
+                ctx.strokeStyle = 'rgba(251, 146, 60, 0.5)';
+                ctx.lineWidth = 0.8;
+                ctx.strokeRect(mx - 24, my - 7, 48, 14);
+                ctx.fillStyle = '#fdba74';
+                ctx.font = '7px JetBrains Mono';
+                ctx.textAlign = 'center';
+                ctx.fillText(`OFF-GRID`, mx, my + 3);
+                ctx.textAlign = 'left';
+              }
+            }
+          }
+
           // Expanding Outer Radar Wave
-          const pulseRadius = 15 + tPulse * 30;
+          const pulseRadius = 14 + tPulse * 26;
           ctx.beginPath();
           ctx.arc(ix, iy, pulseRadius, 0, Math.PI * 2);
           ctx.strokeStyle = isHighSeverity 
             ? `rgba(239, 68, 68, ${1.0 - tPulse})` 
             : `rgba(245, 158, 11, ${1.0 - tPulse})`;
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 1.8;
           ctx.stroke();
 
           if (inc.severity === 5) {
-            const pulseRadius2 = 10 + ((tPulse + 0.5) % 1.0) * 30;
+            const pulseRadius2 = 8 + ((tPulse + 0.5) % 1.0) * 26;
             ctx.beginPath();
             ctx.arc(ix, iy, pulseRadius2, 0, Math.PI * 2);
             ctx.strokeStyle = `rgba(239, 68, 68, ${1.0 - ((tPulse + 0.5) % 1.0)})`;
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 1.2;
             ctx.stroke();
           }
 
@@ -386,25 +464,25 @@ function MapCanvasComponent({
           ctx.translate(ix, iy);
           ctx.rotate(Math.PI / 4);
           ctx.fillStyle = isHighSeverity ? '#ef4444' : '#f59e0b';
-          ctx.fillRect(-8, -8, 16, 16);
+          ctx.fillRect(-7, -7, 14, 14);
           ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(-8, -8, 16, 16);
+          ctx.lineWidth = 1.2;
+          ctx.strokeRect(-7, -7, 14, 14);
           ctx.restore();
 
           ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 9px JetBrains Mono';
+          ctx.font = 'bold 8px JetBrains Mono';
           ctx.textAlign = 'center';
-          ctx.fillText(`L${inc.severity}`, ix, iy + 3.5);
+          ctx.fillText(`L${inc.severity}`, ix, iy + 3);
 
           // Tactical callout badge
           ctx.textAlign = 'left';
           ctx.fillStyle = '#f8fafc';
-          ctx.font = 'bold 10px Plus Jakarta Sans';
-          ctx.fillText(inc.id, ix + 16, iy - 4);
+          ctx.font = 'bold 9px Plus Jakarta Sans';
+          ctx.fillText(inc.id, ix + 14, iy - 3);
           ctx.fillStyle = isHighSeverity ? '#fca5a5' : '#fde68a';
-          ctx.font = '9px JetBrains Mono';
-          ctx.fillText(`${inc.type} [${inc.status}]`, ix + 16, iy + 9);
+          ctx.font = '8px JetBrains Mono';
+          ctx.fillText(`${inc.type} [${inc.status}]`, ix + 14, iy + 8);
         }
       }
 
@@ -451,8 +529,8 @@ function MapCanvasComponent({
           const clusterMembers = clusterMap.get(clusterKey) || [v.id];
           const clusterIdx = clusterMembers.indexOf(v.id);
           const clusterTotal = clusterMembers.length;
-          const clusterOffsetX = clusterTotal > 1 ? (clusterIdx - (clusterTotal - 1) * 0.5) * 22 : 0;
-          const clusterOffsetY = v.state === 'IDLE_STATION' ? -20 : 0;
+          const clusterOffsetX = clusterTotal > 1 ? (clusterIdx - (clusterTotal - 1) * 0.5) * 20 : 0;
+          const clusterOffsetY = v.state === 'IDLE_STATION' ? -18 : 0;
 
           const baseScreenX = PADDING + ((currentPos.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING);
           const baseScreenY = height - (PADDING + ((currentPos.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING));
@@ -467,13 +545,13 @@ function MapCanvasComponent({
           // Focus indicator ring & crosshair reticle
           if (isFocused) {
             ctx.beginPath();
-            ctx.arc(vx, vy, 22 + tPulse * 8, 0, Math.PI * 2);
+            ctx.arc(vx, vy, 20 + tPulse * 7, 0, Math.PI * 2);
             ctx.strokeStyle = `rgba(56, 189, 248, ${1 - tPulse})`;
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = 2.0;
             ctx.stroke();
 
             ctx.beginPath();
-            ctx.arc(vx, vy, 19, 0, Math.PI * 2);
+            ctx.arc(vx, vy, 17, 0, Math.PI * 2);
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 1.5;
             ctx.stroke();
@@ -482,16 +560,16 @@ function MapCanvasComponent({
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 1.5;
             ctx.beginPath();
-            ctx.moveTo(vx - 26, vy); ctx.lineTo(vx - 19, vy);
-            ctx.moveTo(vx + 19, vy); ctx.lineTo(vx + 26, vy);
-            ctx.moveTo(vx, vy - 26); ctx.lineTo(vx, vy - 19);
-            ctx.moveTo(vx, vy + 19); ctx.lineTo(vx, vy + 26);
+            ctx.moveTo(vx - 24, vy); ctx.lineTo(vx - 17, vy);
+            ctx.moveTo(vx + 17, vy); ctx.lineTo(vx + 24, vy);
+            ctx.moveTo(vx, vy - 24); ctx.lineTo(vx, vy - 17);
+            ctx.moveTo(vx, vy + 17); ctx.lineTo(vx, vy + 24);
             ctx.stroke();
           }
 
           // Ambient Glow
           ctx.beginPath();
-          ctx.arc(vx, vy, isOnScene ? 16 : 13, 0, Math.PI * 2);
+          ctx.arc(vx, vy, isOnScene ? 15 : 12, 0, Math.PI * 2);
           ctx.fillStyle = isOnScene 
             ? 'rgba(239, 68, 68, 0.45)' 
             : isAmbulance 
@@ -503,7 +581,7 @@ function MapCanvasComponent({
           if (isAmbulance) {
             // Ambulance: Cyan/Emerald Shield Circle with Medical Cross [+]
             ctx.beginPath();
-            ctx.arc(vx, vy, 9, 0, Math.PI * 2);
+            ctx.arc(vx, vy, 8.5, 0, Math.PI * 2);
             ctx.fillStyle = '#06b6d4';
             ctx.fill();
             ctx.strokeStyle = '#e0f2fe';
@@ -512,17 +590,17 @@ function MapCanvasComponent({
 
             // Medical Cross [+]
             ctx.fillStyle = '#ffffff';
-            ctx.fillRect(vx - 1.5, vy - 5, 3, 10);
-            ctx.fillRect(vx - 5, vy - 1.5, 10, 3);
+            ctx.fillRect(vx - 1.5, vy - 4.5, 3, 9);
+            ctx.fillRect(vx - 4.5, vy - 1.5, 9, 3);
           } else {
             // Fire Engine: Amber/Red Rounded Box with Heavy Border & [F] Glyph
             ctx.fillStyle = '#ea580c';
             ctx.beginPath();
             const r = 3;
-            const x = vx - 9;
-            const y = vy - 9;
-            const w = 18;
-            const h = 18;
+            const x = vx - 8.5;
+            const y = vy - 8.5;
+            const w = 17;
+            const h = 17;
             ctx.moveTo(x + r, y);
             ctx.arcTo(x + w, y, x + w, y + h, r);
             ctx.arcTo(x + w, y + h, x, y + h, r);
@@ -536,27 +614,27 @@ function MapCanvasComponent({
 
             // Fire Engine Flame [F] Glyph
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 10px JetBrains Mono';
+            ctx.font = 'bold 9px JetBrains Mono';
             ctx.textAlign = 'center';
-            ctx.fillText('F', vx, vy + 3.5);
+            ctx.fillText('F', vx, vy + 3);
           }
 
           // Directional Heading Indicator (Pointing along vector to waypoint)
           if (v.state === 'EN_ROUTE_INCIDENT' || v.state === 'TRANSPORTING_HOSPITAL' || v.state === 'RETURNING_TO_BASE') {
             const headingScreen = -currentPos.heading;
-            const arrowDist = 15;
+            const arrowDist = 14;
             const ax = (vx + Math.cos(headingScreen) * arrowDist) | 0;
             const ay = (vy + Math.sin(headingScreen) * arrowDist) | 0;
 
             ctx.beginPath();
             ctx.moveTo(ax, ay);
             ctx.lineTo(
-              (ax - Math.cos(headingScreen - 0.45) * 7) | 0,
-              (ay - Math.sin(headingScreen - 0.45) * 7) | 0
+              (ax - Math.cos(headingScreen - 0.45) * 6.5) | 0,
+              (ay - Math.sin(headingScreen - 0.45) * 6.5) | 0
             );
             ctx.lineTo(
-              (ax - Math.cos(headingScreen + 0.45) * 7) | 0,
-              (ay - Math.sin(headingScreen + 0.45) * 7) | 0
+              (ax - Math.cos(headingScreen + 0.45) * 6.5) | 0,
+              (ay - Math.sin(headingScreen + 0.45) * 6.5) | 0
             );
             ctx.closePath();
             ctx.fillStyle = isAmbulance ? '#22d3ee' : '#fb923c';
@@ -592,9 +670,9 @@ function MapCanvasComponent({
           const pillW = (textWidth + 6) | 0;
           const pillH = 12;
           const pillX = (vx - pillW * 0.5) | 0;
-          const pillY = (vy - 23) | 0;
+          const pillY = (vy - 21) | 0;
 
-          ctx.fillStyle = 'rgba(11, 17, 32, 0.88)';
+          ctx.fillStyle = 'rgba(11, 17, 32, 0.9)';
           ctx.fillRect(pillX, pillY, pillW, pillH);
           ctx.strokeStyle = badgeBorderColor;
           ctx.lineWidth = 1;
@@ -606,8 +684,8 @@ function MapCanvasComponent({
 
           // VEHICLE ID TAG: Rendered cleanly 15px BELOW the vehicle icon
           ctx.fillStyle = '#f8fafc';
-          ctx.font = 'bold 9px JetBrains Mono';
-          ctx.fillText(v.id, vx, vy + 18);
+          ctx.font = 'bold 8.5px JetBrains Mono';
+          ctx.fillText(v.id, vx, vy + 16);
           ctx.textAlign = 'left';
         }
       }
@@ -637,7 +715,7 @@ function MapCanvasComponent({
     const width = canvas.width;
     const height = canvas.height;
 
-    // Convert pixel to km
+    // Convert pixel to 25km coordinates
     const worldX = 1.0 + ((px - PADDING) / (width - 2 * PADDING)) * (WORLD_SIZE - 1.0);
     const worldY = 1.0 + ((height - py - PADDING) / (height - 2 * PADDING)) * (WORLD_SIZE - 1.0);
 
@@ -647,7 +725,7 @@ function MapCanvasComponent({
         const vx = (PADDING + ((v.x - 1.0) / (WORLD_SIZE - 1.0)) * (width - 2 * PADDING)) | 0;
         const vy = (height - (PADDING + ((v.y - 1.0) / (WORLD_SIZE - 1.0)) * (height - 2 * PADDING))) | 0;
         const dist = Math.hypot(px - vx, py - vy);
-        if (dist <= 20) {
+        if (dist <= 18) {
           onFocusVehicle(v.id);
           return;
         }
@@ -659,7 +737,7 @@ function MapCanvasComponent({
     const segments = telemetry.network.segments || [];
 
     let clickedSegment = null;
-    let minSegDist = 18;
+    let minSegDist = 16;
 
     for (let i = 0; i < segments.length; ++i) {
       const seg = segments[i];
@@ -688,7 +766,6 @@ function MapCanvasComponent({
     }
 
     if (clickedSegment) {
-      // Toggle hazard immediately if onToggleSegment is provided, or select it
       if (onToggleSegment) {
         onToggleSegment(clickedSegment);
       } else if (onSelectSegment) {
@@ -697,7 +774,7 @@ function MapCanvasComponent({
       return;
     }
 
-    // 3. Otherwise dispatch coords
+    // 3. Otherwise dispatch coords (with snapping / boundary checking)
     if (onMapClick) {
       onMapClick(parseFloat(worldX.toFixed(2)), parseFloat(worldY.toFixed(2)));
     }
@@ -713,8 +790,8 @@ function MapCanvasComponent({
     >
       <canvas
         ref={canvasRef}
-        width={920}
-        height={560}
+        width={960}
+        height={620}
         onClick={handleCanvasClick}
         className="w-full h-full block cursor-crosshair"
         style={{ display: 'block', background: '#080c14' }}
@@ -724,7 +801,7 @@ function MapCanvasComponent({
       <div 
         className="absolute top-3 left-3 px-3 py-2 rounded-lg text-xs font-mono flex flex-wrap gap-4 items-center pointer-events-none"
         style={{
-          background: 'rgba(9, 13, 22, 0.88)',
+          background: 'rgba(9, 13, 22, 0.9)',
           backdropFilter: 'blur(12px)',
           border: '1px solid rgba(51, 65, 85, 0.7)'
         }}
@@ -735,15 +812,20 @@ function MapCanvasComponent({
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-sm bg-orange-500"></span>
-          <span className="text-slate-300">Fire Engine (Pumper/Aerial)</span>
+          <span className="text-slate-300">Fire Engine (Pumper/Tanker)</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-teal-400"></span>
-          <span className="text-slate-300">Hospital Med-Zone</span>
+          <span className="text-slate-300">Hospital/Clinic Zone</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
           <span className="text-slate-300">V2X Road Closure</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-amber-400 font-bold border border-amber-500/40 px-1 rounded">
+            25KM METRO GRID
+          </span>
         </div>
       </div>
     </div>

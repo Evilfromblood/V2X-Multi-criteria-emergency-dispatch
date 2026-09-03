@@ -63,6 +63,8 @@ std::string Incident::toJson() const {
         << "\"dispatchedAtMinutes\":" << m_dispatchedAtMinutes << ","
         << "\"firstArrivalMinutes\":" << m_firstArrivalMinutes << ","
         << "\"resolvedAtMinutes\":" << m_resolvedAtMinutes << ","
+        << "\"offRoadDistanceKm\":" << m_offRoadDistanceKm << ","
+        << "\"offRoadApproachMinutes\":" << m_offRoadApproachMinutes << ","
         << "\"assignedVehicles\":[";
     for (size_t i = 0; i < m_assignedVehicleIds.size(); ++i) {
         if (i > 0) oss << ",";

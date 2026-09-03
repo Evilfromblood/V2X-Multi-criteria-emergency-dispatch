@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Siren, PlusCircle, CheckCircle, Flame, ShieldAlert, HeartPulse, Sparkles, Send, Stethoscope } from 'lucide-react';
+import { Siren, PlusCircle, CheckCircle, Flame, ShieldAlert, HeartPulse, Sparkles, Send, Stethoscope, Compass, Plane } from 'lucide-react';
 
 export default function IncidentQueue({ incidents = [], onCreateIncident, defaultCoords }) {
   const [type, setType] = useState('FIRE');
   const [severity, setSeverity] = useState(5);
-  const [coordX, setCoordX] = useState(8.0);
+  const [coordX, setCoordX] = useState(5.0);
   const [coordY, setCoordY] = useState(5.0);
-  const [description, setDescription] = useState('Level 5 High-Rise Commercial Blaze');
+  const [description, setDescription] = useState('Level 5 Downtown High-Rise Blaze');
 
   // If user clicked canvas, sync coordinates
   useEffect(() => {
@@ -32,41 +32,41 @@ export default function IncidentQueue({ incidents = [], onCreateIncident, defaul
       onCreateIncident({
         type: 'FIRE',
         severity: 5,
-        x: 8.0,
+        x: 5.0,
         y: 5.0,
-        description: 'Level 5 High-Rise Fire (Atomic Co-Dispatch Engine + Ambulance)'
+        description: 'Level 5 Downtown High-Rise Fire (Atomic Co-Dispatch Engine + Ambulance)'
       });
-    } else if (scenario === 'HIGHWAY_EXTRICATION') {
+    } else if (scenario === 'AIRPORT_HAZMAT') {
       onCreateIncident({
         type: 'RESCUE',
         severity: 5,
-        x: 5.0,
-        y: 5.0,
-        description: 'Multi-Car Pileup Extrication (Requires Paramedic & Preemption)'
+        x: 1.0,
+        y: 11.0,
+        description: 'Airport Fuel Tanker Extrication (West Corridor Crash-Rescue)'
       });
-    } else if (scenario === 'CARDIAC_ARREST') {
+    } else if (scenario === 'LOGISTICS_FIRE') {
       onCreateIncident({
-        type: 'MEDICAL',
+        type: 'FIRE',
         severity: 4,
-        x: 11.0,
-        y: 2.0,
-        description: 'Critical Cardiac Arrest at Harbor Tech Zone'
+        x: 5.0,
+        y: 17.0,
+        description: 'North Logistics Hub Storage Blaze (Heavy Tanker Dispatch)'
       });
-    } else if (scenario === 'LEVEL_2_MEDICAL') {
+    } else if (scenario === 'SUBURBAN_CLINIC_CALL') {
       onCreateIncident({
         type: 'MEDICAL',
         severity: 2,
-        x: 5.0,
-        y: 2.0,
-        description: 'Downtown Minor Medical Emergency (Standard BLS Ambulance)'
-      });
-    } else if (scenario === 'ELECTRICAL_FIRE') {
-      onCreateIncident({
-        type: 'FIRE',
-        severity: 3,
-        x: 2.0,
+        x: 18.0,
         y: 8.0,
-        description: 'Substation Transformer Fire'
+        description: 'East Suburban District Minor Trauma (Community Clinic BLS)'
+      });
+    } else if (scenario === 'OFF_GRID_RESCUE') {
+      onCreateIncident({
+        type: 'RESCUE',
+        severity: 3,
+        x: 15.0,
+        y: 21.0,
+        description: 'North Hills Wilderness Trailhead (Off-Grid 20km/h Approach Penalty)'
       });
     }
   };
@@ -103,11 +103,11 @@ export default function IncidentQueue({ incidents = [], onCreateIncident, defaul
         </span>
       </div>
 
-      {/* 1-Click Test Scenarios Grid */}
+      {/* Multi-Sector Rapid Algorithm Presets */}
       <div className="flex flex-col gap-1.5">
         <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1">
           <Sparkles className="w-3 h-3 text-amber-400" />
-          Rapid Algorithm Test Presets
+          Metropolitan Sector Test Scenarios (25km Grid)
         </label>
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -116,50 +116,68 @@ export default function IncidentQueue({ incidents = [], onCreateIncident, defaul
             style={{ background: 'rgba(30, 41, 59, 0.6)' }}
           >
             <span className="text-xs font-bold text-orange-400 flex items-center gap-1">
-              <Flame className="w-3.5 h-3.5" /> High-Rise Fire (L5)
+              <Flame className="w-3.5 h-3.5" /> Downtown Fire (L5)
             </span>
-            <span className="text-[10px] text-slate-400">Atomic Co-Dispatch (Eng + Amb)</span>
+            <span className="text-[10px] text-slate-400">Co-Dispatch (Engine + Amb)</span>
           </button>
 
           <button
-            onClick={() => triggerPreset('HIGHWAY_EXTRICATION')}
+            onClick={() => triggerPreset('AIRPORT_HAZMAT')}
             className="btn-tactical text-left flex flex-col items-start p-2 hover:border-purple-500/50"
             style={{ background: 'rgba(30, 41, 59, 0.6)' }}
           >
             <span className="text-xs font-bold text-purple-400 flex items-center gap-1">
-              <ShieldAlert className="w-3.5 h-3.5" /> Highway Extrication (L5)
+              <Plane className="w-3.5 h-3.5" /> Airport Crash (L5)
             </span>
-            <span className="text-[10px] text-slate-400">Triggers Priority Preemption</span>
+            <span className="text-[10px] text-slate-400">West Bypass Crash-Rescue Rig</span>
           </button>
 
           <button
-            onClick={() => triggerPreset('LEVEL_2_MEDICAL')}
+            onClick={() => triggerPreset('LOGISTICS_FIRE')}
+            className="btn-tactical text-left flex flex-col items-start p-2 hover:border-amber-500/50"
+            style={{ background: 'rgba(30, 41, 59, 0.6)' }}
+          >
+            <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+              <ShieldAlert className="w-3.5 h-3.5" /> Logistics Fire (L4)
+            </span>
+            <span className="text-[10px] text-slate-400">North Sector Heavy Tanker</span>
+          </button>
+
+          <button
+            onClick={() => triggerPreset('SUBURBAN_CLINIC_CALL')}
             className="btn-tactical text-left flex flex-col items-start p-2 hover:border-emerald-500/50"
             style={{ background: 'rgba(30, 41, 59, 0.6)' }}
           >
             <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
-              <Stethoscope className="w-3.5 h-3.5" /> Downtown Medical (L2)
+              <Stethoscope className="w-3.5 h-3.5" /> East Clinic (L2)
             </span>
-            <span className="text-[10px] text-slate-400">Standard BLS Ambulance</span>
-          </button>
-
-          <button
-            onClick={() => triggerPreset('CARDIAC_ARREST')}
-            className="btn-tactical text-left flex flex-col items-start p-2 hover:border-cyan-500/50"
-            style={{ background: 'rgba(30, 41, 59, 0.6)' }}
-          >
-            <span className="text-xs font-bold text-cyan-400 flex items-center gap-1">
-              <HeartPulse className="w-3.5 h-3.5" /> Cardiac Arrest (L4)
-            </span>
-            <span className="text-[10px] text-slate-400">Paramedic ALS Priority</span>
+            <span className="text-[10px] text-slate-400">Suburban Clinic BLS Ambulance</span>
           </button>
         </div>
+
+        {/* 1-Click Off-Grid Wilderness Scenario */}
+        <button
+          onClick={() => triggerPreset('OFF_GRID_RESCUE')}
+          className="btn-tactical text-left flex items-center justify-between p-2 mt-0.5 border border-amber-500/30 hover:border-amber-400"
+          style={{ background: 'rgba(120, 53, 15, 0.25)' }}
+        >
+          <div className="flex items-center gap-2">
+            <Compass className="w-4 h-4 text-amber-400" />
+            <div>
+              <div className="text-xs font-bold text-amber-300">Off-Grid Wilderness Rescue (L3)</div>
+              <div className="text-[10px] text-slate-400">Tests 20 km/h local approach speed penalty added to Dijkstra ETA</div>
+            </div>
+          </div>
+          <span className="text-[10px] font-mono text-amber-400 font-bold px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-800">
+            [15km, 21km]
+          </span>
+        </button>
       </div>
 
       {/* Manual Incident Creator Form */}
       <form onSubmit={handleSubmit} className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col gap-2.5">
         <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
-          Targeted Incident Dispatch
+          Targeted Incident Dispatch (0.5 – 24.5 km)
         </span>
 
         <div className="grid grid-cols-3 gap-2">
@@ -200,8 +218,8 @@ export default function IncidentQueue({ incidents = [], onCreateIncident, defaul
               <input
                 type="number"
                 step="0.5"
-                min="1"
-                max="13"
+                min="0.5"
+                max="24.5"
                 value={coordX}
                 onChange={(e) => setCoordX(e.target.value)}
                 className="w-1/2 p-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 font-mono"
@@ -209,8 +227,8 @@ export default function IncidentQueue({ incidents = [], onCreateIncident, defaul
               <input
                 type="number"
                 step="0.5"
-                min="1"
-                max="13"
+                min="0.5"
+                max="24.5"
                 value={coordY}
                 onChange={(e) => setCoordY(e.target.value)}
                 className="w-1/2 p-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 font-mono"
@@ -262,6 +280,11 @@ export default function IncidentQueue({ incidents = [], onCreateIncident, defaul
                   <div className="font-bold text-slate-200 flex items-center gap-1.5">
                     <span>{inc.id}</span>
                     <span className="text-[10px] text-slate-400">({inc.type})</span>
+                    {inc.offRoadDistanceKm > 0.1 && (
+                      <span className="text-[9px] font-mono text-orange-400 bg-orange-950/60 px-1 rounded border border-orange-800/60">
+                        +{Number(inc.offRoadDistanceKm).toFixed(1)}km off-road
+                      </span>
+                    )}
                   </div>
                   <div className="text-[11px] text-slate-400">{inc.description}</div>
                 </div>

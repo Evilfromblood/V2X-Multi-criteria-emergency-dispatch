@@ -33,10 +33,12 @@ double Ambulance::calculateSuitability(const Incident& incident, const RoadNetwo
         return -1.0;
     }
 
+    double totalEtaMinutes = route.estimatedTimeMinutes + incident.getOffRoadApproachMinutes();
+
     double score = 100.0;
 
-    // Time deduction: 3 points per minute of ETA
-    score -= (route.estimatedTimeMinutes * 3.0);
+    // Time deduction: 3 points per minute of total ETA (road transit + off-grid approach)
+    score -= (totalEtaMinutes * 3.0);
 
     // Triage capability check
     if (m_maxTriageLevel < incident.getSeverity()) {

@@ -43,6 +43,13 @@ public:
     int getRequiredFireEngines() const { return m_requiredFireEngines; }
     bool requiresParamedic() const { return m_requiresParamedic; }
 
+    double getOffRoadDistanceKm() const { return m_offRoadDistanceKm; }
+    double getOffRoadApproachMinutes() const { return m_offRoadApproachMinutes; }
+    void setOffRoadApproach(double distKm, double speedKmH = 20.0) {
+        m_offRoadDistanceKm = distKm;
+        m_offRoadApproachMinutes = (speedKmH > 0.0) ? (distKm / speedKmH) * 60.0 : 0.0;
+    }
+
     std::string toJson() const;
 
 private:
@@ -64,6 +71,9 @@ private:
     int m_requiredAmbulances = 1;
     int m_requiredFireEngines = 0;
     bool m_requiresParamedic = false;
+
+    double m_offRoadDistanceKm = 0.0;
+    double m_offRoadApproachMinutes = 0.0;
 };
 
 #endif // INCIDENT_H

@@ -41,7 +41,7 @@ export default function HazardPanel({
     });
   };
 
-  // Key tactical corridor toggles
+  // Key tactical corridor toggles across metropolitan sectors
   const keyCorridors = [
     {
       name: 'Central HQ Expressway',
@@ -62,13 +62,31 @@ export default function HazardPanel({
       desc: 'Central Hospital Expressway Crash'
     },
     {
-      name: 'Downtown Main Corridor',
-      from: 'N5',
-      to: 'N6',
+      name: 'Airport Outer Bypass',
+      from: 'N28_CARGO_DEPOT',
+      to: 'N27_OUTER_BYPASS',
       type: 'GRIDLOCK',
-      multiplier: 4.5,
+      multiplier: 4.0,
       blocked: false,
-      desc: 'Downtown Rush Hour Gridlock'
+      desc: 'West Ringway Airport Congestion'
+    },
+    {
+      name: 'Logistics North Arterial',
+      from: 'N14',
+      to: 'N17_LOGISTICS',
+      type: 'ROADWORK',
+      multiplier: 3.0,
+      blocked: true,
+      desc: 'North Sector Freight Expressway Work'
+    },
+    {
+      name: 'Inter-Clinic Trauma Link',
+      from: 'N11_HOSPITAL',
+      to: 'N21_CLINIC',
+      type: 'ACCIDENT',
+      multiplier: 3.5,
+      blocked: true,
+      desc: 'Hospital to East Clinic Ambulance Corridor'
     },
     {
       name: 'East River Bridge',
@@ -78,15 +96,6 @@ export default function HazardPanel({
       multiplier: 1.0,
       blocked: true,
       desc: 'East River Bridge Storm Surge'
-    },
-    {
-      name: 'Midtown Crossway',
-      from: 'N9',
-      to: 'N10',
-      type: 'ROADWORK',
-      multiplier: 2.5,
-      blocked: false,
-      desc: 'Midtown Infrastructure Work'
     }
   ];
 

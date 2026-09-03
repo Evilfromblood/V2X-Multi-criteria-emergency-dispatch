@@ -151,7 +151,7 @@ std::vector<RoadSegment> RoadNetwork::getAllSegments() const {
 RoadNetwork RoadNetwork::createDefaultCityGrid() {
     RoadNetwork net;
 
-    // 16 Nodes arranged on a 12km x 12km grid
+    // 1. Core Metropolitan Grid (16 Baseline Nodes)
     net.addNode({"N1_HQ", 2.0, 2.0, "Central Station HQ", "STATION"});
     net.addNode({"N2", 5.0, 2.0, "South Junction", "INTERSECTION"});
     net.addNode({"N3", 8.0, 2.0, "East Depot", "STATION"});
@@ -172,7 +172,29 @@ RoadNetwork RoadNetwork::createDefaultCityGrid() {
     net.addNode({"N15", 8.0, 11.0, "Suburban Heights", "RESIDENTIAL"});
     net.addNode({"N16", 11.0, 11.0, "East Bridge North", "INTERSECTION"});
 
-    // Horizontal links (3 km apart)
+    // 2. West Sector: Outer Bypass Highway & Airport Corridor
+    net.addNode({"N28_CARGO_DEPOT", 1.0, 2.0, "Cargo Transit Depot", "STATION"});
+    net.addNode({"N27_OUTER_BYPASS", 1.0, 5.0, "West Outer Ringway", "INTERSECTION"});
+    net.addNode({"N26_AIRPORT_DEPOT", 1.0, 8.0, "Airport Fire & EMS Station", "STATION"});
+    net.addNode({"N25_AIRPORT", 1.0, 11.0, "Metro International Airport", "COMMERCIAL"});
+
+    // 3. North Sector: Industrial Zone & Logistics Depot
+    net.addNode({"N20_NORTH_GATE", 2.0, 17.0, "North Gate Expressway", "INTERSECTION"});
+    net.addNode({"N17_LOGISTICS", 5.0, 17.0, "Logistics Hub & Depot", "STATION"});
+    net.addNode({"N18_INDUSTRIAL", 8.0, 17.0, "North Industrial Park", "INDUSTRIAL"});
+    net.addNode({"N19_RAIL_YARD", 11.0, 17.0, "Freight Rail Terminal", "INDUSTRIAL"});
+    net.addNode({"N29_FREIGHT_HUB", 5.0, 23.0, "Metropolitan Freight Complex", "INDUSTRIAL"});
+    net.addNode({"N30_NORTH_METRO", 11.0, 23.0, "North Metro Perimeter Plaza", "COMMERCIAL"});
+
+    // 4. South-East Sector: Suburban District & Community Clinic
+    net.addNode({"N23_MARINA", 18.0, 2.0, "Coastal Marina & Yacht Basin", "COMMERCIAL"});
+    net.addNode({"N21_CLINIC", 18.0, 5.0, "East Community Clinic", "HOSPITAL"});
+    net.addNode({"N22_SUBURB_EAST", 18.0, 8.0, "Evergreen Suburban District", "RESIDENTIAL"});
+    net.addNode({"N24_TECH_CAMPUS", 18.0, 11.0, "Silicon Bay Tech Campus", "COMMERCIAL"});
+    net.addNode({"N31_COASTAL_SOUTH", 24.0, 2.0, "Coastal Point South", "RESIDENTIAL"});
+    net.addNode({"N32_COASTAL_NORTH", 24.0, 8.0, "Coastal Point North", "COMMERCIAL"});
+
+    // Core Horizontal links (3 km apart)
     net.addBidirectionalSegment("N1_HQ", "N2", 3.0, 60.0);
     net.addBidirectionalSegment("N2", "N3", 3.0, 60.0);
     net.addBidirectionalSegment("N3", "N4", 3.0, 50.0);
@@ -189,7 +211,7 @@ RoadNetwork RoadNetwork::createDefaultCityGrid() {
     net.addBidirectionalSegment("N14", "N15", 3.0, 45.0);
     net.addBidirectionalSegment("N15", "N16", 3.0, 50.0);
 
-    // Vertical links (3 km apart)
+    // Core Vertical links (3 km apart)
     net.addBidirectionalSegment("N1_HQ", "N5", 3.0, 60.0);
     net.addBidirectionalSegment("N5", "N9", 3.0, 60.0);
     net.addBidirectionalSegment("N9", "N13", 3.0, 75.0); // Arterial express
@@ -206,11 +228,63 @@ RoadNetwork RoadNetwork::createDefaultCityGrid() {
     net.addBidirectionalSegment("N8", "N12", 3.0, 55.0);
     net.addBidirectionalSegment("N12", "N16", 3.0, 65.0); // River bridge
 
-    // Diagonal Express Highways (hypotenuse: sqrt(3^2 + 3^2) = 4.24 km)
+    // Core Diagonal Express Highways
     net.addBidirectionalSegment("N1_HQ", "N6", 4.24, 70.0);
     net.addBidirectionalSegment("N6", "N11_HOSPITAL", 4.24, 70.0);
     net.addBidirectionalSegment("N7", "N12", 4.24, 65.0);
     net.addBidirectionalSegment("N10", "N15", 4.24, 60.0);
+
+    // West Sector Outer Bypass Corridors (80 km/h)
+    net.addBidirectionalSegment("N28_CARGO_DEPOT", "N27_OUTER_BYPASS", 3.0, 80.0);
+    net.addBidirectionalSegment("N27_OUTER_BYPASS", "N26_AIRPORT_DEPOT", 3.0, 80.0);
+    net.addBidirectionalSegment("N26_AIRPORT_DEPOT", "N25_AIRPORT", 3.0, 80.0);
+
+    // West-to-Core Connectors
+    net.addBidirectionalSegment("N28_CARGO_DEPOT", "N1_HQ", 1.0, 60.0);
+    net.addBidirectionalSegment("N27_OUTER_BYPASS", "N5", 1.0, 60.0);
+    net.addBidirectionalSegment("N26_AIRPORT_DEPOT", "N9", 1.0, 60.0);
+    net.addBidirectionalSegment("N25_AIRPORT", "N13", 1.0, 60.0);
+
+    // West Diagonal Bypasses
+    net.addBidirectionalSegment("N27_OUTER_BYPASS", "N6", 4.0, 75.0);
+    net.addBidirectionalSegment("N26_AIRPORT_DEPOT", "N10", 4.0, 75.0);
+
+    // North Sector Corridors
+    net.addBidirectionalSegment("N13", "N20_NORTH_GATE", 6.0, 70.0);
+    net.addBidirectionalSegment("N14", "N17_LOGISTICS", 6.0, 70.0);
+    net.addBidirectionalSegment("N15", "N18_INDUSTRIAL", 6.0, 70.0);
+    net.addBidirectionalSegment("N16", "N19_RAIL_YARD", 6.0, 70.0);
+    net.addBidirectionalSegment("N25_AIRPORT", "N20_NORTH_GATE", 6.08, 85.0);
+
+    net.addBidirectionalSegment("N20_NORTH_GATE", "N17_LOGISTICS", 3.0, 65.0);
+    net.addBidirectionalSegment("N17_LOGISTICS", "N18_INDUSTRIAL", 3.0, 65.0);
+    net.addBidirectionalSegment("N18_INDUSTRIAL", "N19_RAIL_YARD", 3.0, 65.0);
+
+    net.addBidirectionalSegment("N17_LOGISTICS", "N29_FREIGHT_HUB", 6.0, 75.0);
+    net.addBidirectionalSegment("N19_RAIL_YARD", "N30_NORTH_METRO", 6.0, 75.0);
+    net.addBidirectionalSegment("N29_FREIGHT_HUB", "N30_NORTH_METRO", 6.0, 80.0);
+
+    // North Diagonal Expressways
+    net.addBidirectionalSegment("N11_HOSPITAL", "N17_LOGISTICS", 9.48, 80.0);
+    net.addBidirectionalSegment("N14", "N18_INDUSTRIAL", 6.7, 70.0);
+
+    // South-East Sector Corridors
+    net.addBidirectionalSegment("N4", "N23_MARINA", 7.0, 65.0);
+    net.addBidirectionalSegment("N8", "N21_CLINIC", 7.0, 65.0);
+    net.addBidirectionalSegment("N12", "N22_SUBURB_EAST", 7.0, 65.0);
+    net.addBidirectionalSegment("N16", "N24_TECH_CAMPUS", 7.0, 65.0);
+
+    net.addBidirectionalSegment("N23_MARINA", "N21_CLINIC", 3.0, 55.0);
+    net.addBidirectionalSegment("N21_CLINIC", "N22_SUBURB_EAST", 3.0, 55.0);
+    net.addBidirectionalSegment("N22_SUBURB_EAST", "N24_TECH_CAMPUS", 3.0, 60.0);
+
+    net.addBidirectionalSegment("N23_MARINA", "N31_COASTAL_SOUTH", 6.0, 70.0);
+    net.addBidirectionalSegment("N22_SUBURB_EAST", "N32_COASTAL_NORTH", 6.0, 70.0);
+    net.addBidirectionalSegment("N31_COASTAL_SOUTH", "N32_COASTAL_NORTH", 6.0, 75.0);
+
+    // South-East Diagonal Emergency Links
+    net.addBidirectionalSegment("N11_HOSPITAL", "N21_CLINIC", 10.44, 85.0);
+    net.addBidirectionalSegment("N19_RAIL_YARD", "N24_TECH_CAMPUS", 9.22, 80.0);
 
     return net;
 }

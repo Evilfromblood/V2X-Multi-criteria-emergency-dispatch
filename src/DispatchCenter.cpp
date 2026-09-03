@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <iostream>
+#include <cmath>
 
 DispatchCenter::DispatchCenter() {
     resetSimulation();
@@ -25,18 +26,24 @@ void DispatchCenter::resetSimulation() {
 void DispatchCenter::initializeDefaultFleet() {
     // Deploy a modern emergency response fleet stationed strategically across city depots
     
-    // Central HQ (N1_HQ - Southwest)
+    // Central HQ (N1_HQ - Southwest Core)
     m_fleet.push_back(std::make_unique<Ambulance>("AMB-101", "N1_HQ", 2.0, 2.0, 5, true, 65.0)); // ALS with Paramedic
     m_fleet.push_back(std::make_unique<Ambulance>("AMB-102", "N1_HQ", 2.0, 2.0, 3, false, 65.0)); // BLS standard
     m_fleet.push_back(std::make_unique<FireEngine>("ENG-201", "N1_HQ", 2.0, 2.0, 4500.0, 32.0, 55.0)); // Heavy Pumper & Aerial
 
-    // East Depot (N3 - Southeast)
+    // East Depot (N3 - Southeast Core)
     m_fleet.push_back(std::make_unique<Ambulance>("AMB-103", "N3", 8.0, 2.0, 4, true, 65.0));
     m_fleet.push_back(std::make_unique<FireEngine>("ENG-202", "N3", 8.0, 2.0, 3800.0, 28.0, 55.0));
 
-    // Northwest Base (N9 - Northwest)
+    // Northwest Base (N9 - Northwest Core)
     m_fleet.push_back(std::make_unique<Ambulance>("AMB-104", "N9", 2.0, 8.0, 3, false, 65.0));
     m_fleet.push_back(std::make_unique<FireEngine>("ENG-203", "N9", 2.0, 8.0, 5000.0, 35.0, 55.0)); // Heavy Industrial Pumper
+
+    // North Sector: Logistics Depot Hub (N17_LOGISTICS)
+    m_fleet.push_back(std::make_unique<FireEngine>("ENG-204", "N17_LOGISTICS", 5.0, 17.0, 5500.0, 36.0, 55.0));
+
+    // West Sector: Airport Emergency Station (N26_AIRPORT_DEPOT)
+    m_fleet.push_back(std::make_unique<FireEngine>("ENG-205", "N26_AIRPORT_DEPOT", 1.0, 8.0, 6000.0, 40.0, 60.0));
 }
 
 void DispatchCenter::addVehicle(std::unique_ptr<EmergencyVehicle> vehicle) {
@@ -59,17 +66,41 @@ std::string DispatchCenter::createIncident(const std::string& type, int severity
     std::lock_guard<std::mutex> lock(m_mutex);
 
     std::string id = customId.empty() ? ("INC-" + std::to_string(m_incidentCounter++)) : customId;
-    std::string nearestNode = m_network.getNearestNode(x, y);
 
-    Incident inc(id, type, severity, x, y, desc.empty() ? (type + " Level " + std::to_string(severity)) : desc);
+    // Explicit Bounding Box Clamping [0.5, 24.5] km
+    double clampedX = std::max(0.5, std::min(24.5, x));
+    double clampedY = std::max(0.5, std::min(24.5, y));
+
+    std::string nearestNode = m_network.getNearestNode(clampedX, clampedY);
+
+    Incident inc(id, type, severity, clampedX, clampedY, desc.empty() ? (type + " Level " + std::to_string(severity)) : desc);
     inc.setNearestNodeId(nearestNode);
+
+    // Off-Grid First/Last-Mile Transit Penalty Calculation
+    const Intersection* node = m_network.getNode(nearestNode);
+    if (node) {
+        double dx = clampedX - node->x;
+        double dy = clampedY - node->y;
+        double offRoadDistKm = std::sqrt(dx * dx + dy * dy);
+        inc.setOffRoadApproach(offRoadDistKm, 20.0); // 20 km/h local approach speed penalty
+    }
+
     inc.setCreatedAtMinutes(m_currentClockMinutes);
 
     m_incidents.push_back(inc);
 
+    std::string penaltyMsg = "";
+    if (inc.getOffRoadDistanceKm() > 0.1) {
+        std::ostringstream poss;
+        poss << std::fixed << std::setprecision(1);
+        poss << " (+" << inc.getOffRoadDistanceKm() << "km off-grid, +" 
+             << inc.getOffRoadApproachMinutes() << "m approach)";
+        penaltyMsg = poss.str();
+    }
+
     m_analytics.logEvent(m_currentClockMinutes, "INCIDENT_CREATED", id, "DISPATCH",
-                         "Incident reported at (" + std::to_string((int)x) + "," + std::to_string((int)y) + 
-                         ") near " + nearestNode + " (Severity " + std::to_string(severity) + ")");
+                         "Incident reported at (" + std::to_string((int)clampedX) + "," + std::to_string((int)clampedY) + 
+                         ") near " + nearestNode + penaltyMsg + " (Severity " + std::to_string(severity) + ")");
 
     attemptDispatch(m_incidents.back());
 
