@@ -32,6 +32,9 @@ public:
     void addVehicle(std::unique_ptr<EmergencyVehicle> vehicle);
     const std::vector<std::unique_ptr<EmergencyVehicle>>& getFleet() const { return m_fleet; }
     EmergencyVehicle* getVehicleById(const std::string& id);
+    bool recallVehicle(const std::string& vehicleId);
+    bool resolveIncident(const std::string& incidentId);
+    void applyWeather(const std::string& weatherType, double multiplier);
 
     // Simulation loop
     void advanceSimulationClock(double deltaMinutes);

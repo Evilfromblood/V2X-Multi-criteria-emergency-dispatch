@@ -1,7 +1,16 @@
-import React from 'react';
-import { Shield, Flame, Activity, Clock, Navigation, MapPin, Crosshair } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Shield, Flame, Activity, Clock, Navigation, MapPin, Crosshair, Search, RotateCcw } from 'lucide-react';
 
-export default function FleetTable({ fleet = [], focusedVehicleId, onFocusVehicle }) {
+export default function FleetTable({ 
+  fleet = [], 
+  focusedVehicleId, 
+  onFocusVehicle, 
+  onSelectVehicle, 
+  onRecallVehicle 
+}) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'AVAILABLE' | 'ACTIVE'
+
   const getStateBadge = (state, timer) => {
     const displayTimer = (timer != null) ? Number(timer).toFixed(1) : '0.0';
 
@@ -45,7 +54,7 @@ export default function FleetTable({ fleet = [], focusedVehicleId, onFocusVehicl
         return (
           <span className="badge badge-returning">
             <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
-            RETURNING (INTERCEPTABLE)
+            RETURNING
           </span>
         );
       default:
@@ -57,152 +66,145 @@ export default function FleetTable({ fleet = [], focusedVehicleId, onFocusVehicl
     }
   };
 
-  const getProgressVisual = (vehicle) => {
-    const timer = vehicle.stateTimerMinutes ?? 0;
-    if (vehicle.state === 'ON_SCENE' || vehicle.state === 'AT_HOSPITAL_TURNOVER') {
-      const maxTimer = 15.0;
-      const pct = Math.min(100, Math.max(5, (1.0 - (timer / maxTimer)) * 100));
-      return (
-        <div className="flex flex-col gap-1 w-20">
-          <div className="progress-track">
-            <div 
-              className="progress-fill"
-              style={{
-                width: `${pct}%`,
-                background: vehicle.state === 'ON_SCENE' ? '#ef4444' : '#f59e0b'
-              }}
-            />
-          </div>
-          <span className="text-[9px] font-mono text-slate-400">{timer.toFixed(1)}m left</span>
-        </div>
-      );
-    } else if (vehicle.state === 'EN_ROUTE_INCIDENT' || vehicle.state === 'TRANSPORTING_HOSPITAL') {
-      return (
-        <div className="flex flex-col gap-1 w-20">
-          <div className="progress-track">
-            <div 
-              className="progress-fill"
-              style={{
-                width: '65%',
-                background: '#38bdf8'
-              }}
-            />
-          </div>
-          <span className="text-[9px] font-mono text-sky-400">In Transit</span>
-        </div>
-      );
-    }
-    return <span className="text-[10px] font-mono text-slate-500">—</span>;
-  };
+  const filteredFleet = useMemo(() => {
+    return fleet.filter((v) => {
+      const matchSearch = v.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (v.homeBaseNode || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          v.type.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchSearch) return false;
+      if (statusFilter === 'AVAILABLE') return v.state === 'IDLE_STATION' || v.state === 'RETURNING_TO_BASE';
+      if (statusFilter === 'ACTIVE') return v.state !== 'IDLE_STATION';
+      return true;
+    });
+  }, [fleet, searchQuery, statusFilter]);
 
   return (
     <div className="glass-panel p-4 flex flex-col gap-3">
+      {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
           <Activity className="w-4 h-4 text-sky-400" />
-          Active Fleet Telemetry ({fleet.length} Units)
+          Active Fleet Telemetry Deck
         </h3>
-        <span className="text-[11px] font-mono text-slate-400">
-          Discrete V2X State Engine
+        <span className="text-[11px] font-mono text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/60">
+          {fleet.length} Units Registered
         </span>
       </div>
 
-      <div className="overflow-x-auto" style={{ maxHeight: '480px' }}>
-        <table className="w-full text-left text-xs" style={{ borderCollapse: 'collapse' }}>
+      {/* Search & Status Filter Bar */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 relative">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search unit ID, station, type..."
+            className="w-full pl-8 pr-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 font-mono"
+          />
+        </div>
+
+        <div className="flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-slate-800">
+          {['ALL', 'AVAILABLE', 'ACTIVE'].map((f) => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                statusFilter === f 
+                  ? 'bg-blue-600 text-white' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              style={{ border: 'none', cursor: 'pointer' }}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Fleet Table */}
+      <div className="overflow-x-auto">
+        <table className="tactical-table w-full text-left">
           <thead>
-            <tr className="border-b border-slate-800 text-slate-400 font-mono text-[10px] uppercase">
-              <th className="pb-2">Unit ID</th>
-              <th className="pb-2">Status</th>
-              <th className="pb-2">Progress</th>
-              <th className="pb-2">Current Node</th>
-              <th className="pb-2">Assigned Call</th>
-              <th className="pb-2">Specs</th>
-              <th className="pb-2 text-right">Odo</th>
-              <th className="pb-2 text-right">Action</th>
+            <tr>
+              <th>UNIT</th>
+              <th>TYPE</th>
+              <th>STATUS</th>
+              <th>BASE / NODE</th>
+              <th>ODOMETER</th>
+              <th className="text-right">ACTIONS</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-850">
-            {fleet.map((v) => {
+          <tbody>
+            {filteredFleet.map((v) => {
               const isAmbulance = v.type === 'AMBULANCE';
               const isFocused = focusedVehicleId === v.id;
-              const odo = (v.totalDistanceTraveledKm ?? v.odometerKm ?? 0);
 
               return (
-                <tr 
-                  key={v.id} 
-                  className={`hover:bg-slate-800/40 transition-colors ${
-                    isFocused ? 'bg-sky-950/40' : ''
-                  }`}
+                <tr
+                  key={v.id}
+                  className={`transition-colors cursor-pointer ${isFocused ? 'bg-sky-950/40' : 'hover:bg-slate-900/50'}`}
+                  onClick={() => onSelectVehicle && onSelectVehicle(v)}
                 >
-                  {/* Unit ID & Type */}
-                  <td className="py-2.5 font-bold font-mono text-slate-100 flex items-center gap-1.5">
-                    {isAmbulance ? (
-                      <Shield className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
-                    ) : (
-                      <Flame className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
-                    )}
-                    <span>{v.id}</span>
-                  </td>
-
-                  {/* Status Badge */}
-                  <td className="py-2.5">
-                    {getStateBadge(v.state, v.stateTimerMinutes)}
-                  </td>
-
-                  {/* Progress Visual */}
-                  <td className="py-2.5">
-                    {getProgressVisual(v)}
-                  </td>
-
-                  {/* Current Position / Node */}
-                  <td className="py-2.5 font-mono text-slate-300">
-                    <div className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-slate-500" />
-                      <span>{v.currentNodeId || 'Transit'}</span>
+                  {/* Unit ID */}
+                  <td className="font-mono font-bold text-slate-100">
+                    <div className="flex items-center gap-1.5">
+                      {isAmbulance ? (
+                        <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                      ) : (
+                        <Flame className="w-3.5 h-3.5 text-orange-500" />
+                      )}
+                      <span>{v.id}</span>
                     </div>
                   </td>
 
-                  {/* Assigned Incident */}
-                  <td className="py-2.5 font-mono">
-                    {v.assignedIncidentId ? (
-                      <span className="text-rose-400 font-bold bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-800/60">
-                        {v.assignedIncidentId}
-                      </span>
-                    ) : (
-                      <span className="text-slate-500">Unassigned</span>
-                    )}
+                  {/* Type */}
+                  <td className="font-mono text-xs text-slate-400">
+                    {isAmbulance ? (v.hasParamedic ? 'ALS PARAMEDIC' : 'BLS AMB') : 'FIRE PUMPER'}
                   </td>
 
-                  {/* Capabilities / Specs */}
-                  <td className="py-2.5 font-mono text-[10px] text-slate-400">
-                    {isAmbulance ? (
-                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">
-                        {v.hasParamedic ? 'ALS (Paramedic)' : 'BLS (EMT)'}
-                      </span>
-                    ) : (
-                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-orange-300 border border-slate-700">
-                        {v.waterCapacityLiters || 4000}L · {v.aerialLadderMeters || 30}m
-                      </span>
-                    )}
+                  {/* Status Badge */}
+                  <td>{getStateBadge(v.state, v.stateTimerMinutes)}</td>
+
+                  {/* Location */}
+                  <td className="font-mono text-xs text-slate-300">
+                    <div className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-slate-500" />
+                      <span>{v.currentNodeId || v.homeBaseNode || 'N1_HQ'}</span>
+                    </div>
                   </td>
 
                   {/* Odometer */}
-                  <td className="py-2.5 font-mono text-right text-slate-300">
-                    {Number(odo).toFixed(1)}km
+                  <td className="font-mono text-xs text-slate-400">
+                    {(v.totalDistanceTraveledKm ?? 0).toFixed(1)} km
                   </td>
 
-                  {/* Quick Focus Button */}
-                  <td className="py-2.5 text-right">
-                    <button
-                      onClick={() => onFocusVehicle && onFocusVehicle(v.id)}
-                      className={`btn-tactical text-[10px] px-2 py-1 ${
-                        isFocused ? 'btn-tactical-primary' : ''
-                      }`}
-                      title="Focus this vehicle on tactical map"
-                    >
-                      <Crosshair className="w-3 h-3" />
-                      <span>{isFocused ? 'LOCKED' : 'FOCUS'}</span>
-                    </button>
+                  {/* Actions */}
+                  <td className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1">
+                      {v.state !== 'IDLE_STATION' && onRecallVehicle && (
+                        <button
+                          onClick={() => onRecallVehicle(v.id)}
+                          className="btn-tactical text-[10px] px-1.5 py-1 text-rose-400 hover:bg-rose-950/50"
+                          title="Recall unit to base"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          onFocusVehicle(v.id);
+                          if (onSelectVehicle) onSelectVehicle(v);
+                        }}
+                        className={`btn-tactical text-[10px] px-2 py-1 ${
+                          isFocused ? 'bg-sky-500/20 text-sky-300 border-sky-400 font-bold' : ''
+                        }`}
+                        title="Lock camera focus on unit"
+                      >
+                        <Crosshair className="w-3 h-3" />
+                        <span>{isFocused ? 'LOCKED' : 'FOCUS'}</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

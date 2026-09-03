@@ -73,6 +73,25 @@ bool EmergencyVehicle::rerouteTo(const std::string& destNode, const RoadNetwork&
     return false;
 }
 
+void EmergencyVehicle::recallToBase(const RoadNetwork& network, RouteOptimizer& optimizer) {
+    if (m_state == VehicleState::IDLE_STATION) return;
+    m_destinationNodeId = m_homeBaseNode;
+    m_assignedIncidentId = "";
+    m_stateTimerMinutes = 0.0;
+    std::string startNode = m_currentNodeId.empty() ? network.getNearestNode(m_x, m_y) : m_currentNodeId;
+    RouteResult res = optimizer.findShortestRoute(network, startNode, m_homeBaseNode);
+    if (res.reachable && !res.pathNodes.empty()) {
+        assignRoute(res.pathNodes, m_homeBaseNode, VehicleState::RETURNING_TO_BASE);
+    } else {
+        m_state = VehicleState::IDLE_STATION;
+        const Intersection* base = network.getNode(m_homeBaseNode);
+        if (base) {
+            m_x = base->x;
+            m_y = base->y;
+        }
+    }
+}
+
 bool EmergencyVehicle::checkAndRerouteIfBlocked(const RoadNetwork& network, RouteOptimizer& optimizer) {
     if (m_state != VehicleState::EN_ROUTE_INCIDENT && 
         m_state != VehicleState::TRANSPORTING_HOSPITAL && 

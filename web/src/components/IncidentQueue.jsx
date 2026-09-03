@@ -260,9 +260,14 @@ export default function IncidentQueue({ incidents = [], onCreateIncident, defaul
 
       {/* Active Incidents Queue */}
       <div className="flex flex-col gap-2">
-        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
-          Incident Log ({incidents.length} Calls Total)
-        </span>
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+            Incident Log ({incidents.length} Calls Total)
+          </span>
+          <span className="text-[10px] font-mono text-slate-400">
+            {activeIncidents.length} Pending / Active
+          </span>
+        </div>
 
         <div className="overflow-y-auto max-h-48 flex flex-col gap-1.5 pr-1">
           {incidents.map((inc) => (
@@ -290,8 +295,20 @@ export default function IncidentQueue({ incidents = [], onCreateIncident, defaul
                 </div>
               </div>
 
-              <div className="flex flex-col items-end gap-1">
-                {getStatusBadge(inc.status)}
+              <div className="flex flex-col items-end gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  {getStatusBadge(inc.status)}
+                  {inc.status !== 'RESOLVED' && onResolveIncident && (
+                    <button
+                      onClick={() => onResolveIncident(inc.id)}
+                      className="btn-tactical text-[9px] px-1.5 py-0.5 text-emerald-400 hover:bg-emerald-950/40"
+                      title="Mark call as resolved"
+                    >
+                      <CheckCircle className="w-2.5 h-2.5" />
+                      <span>RESOLVE</span>
+                    </button>
+                  )}
+                </div>
                 {inc.assignedVehicleIds && inc.assignedVehicleIds.length > 0 && (
                   <span className="text-[10px] font-mono text-sky-400">
                     Units: {inc.assignedVehicleIds.join(', ')}

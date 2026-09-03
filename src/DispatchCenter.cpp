@@ -384,6 +384,53 @@ void DispatchCenter::checkAndRerouteFleet() {
     }
 }
 
+bool DispatchCenter::recallVehicle(const std::string& vehicleId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    EmergencyVehicle* v = getVehicleById(vehicleId);
+    if (!v) return false;
+    v->recallToBase(m_network, m_optimizer);
+    m_analytics.logEvent(m_currentClockMinutes, "MANUAL_RECALL", "", vehicleId,
+                         "Manual Recall: " + vehicleId + " ordered to RTB " + v->getHomeBaseNode());
+    return true;
+}
+
+bool DispatchCenter::resolveIncident(const std::string& incidentId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (auto& inc : m_incidents) {
+        if (inc.getId() == incidentId) {
+            inc.setStatus("RESOLVED");
+            inc.setResolvedAtMinutes(m_currentClockMinutes);
+            // Recall assigned vehicles that are on scene
+            for (const auto& vid : inc.getAssignedVehicleIds()) {
+                EmergencyVehicle* v = getVehicleById(vid);
+                if (v && (v->getState() == VehicleState::ON_SCENE || v->getState() == VehicleState::EN_ROUTE_INCIDENT)) {
+                    v->recallToBase(m_network, m_optimizer);
+                }
+            }
+            m_analytics.logEvent(m_currentClockMinutes, "INCIDENT_RESOLVED", incidentId, "CAD",
+                                 "Incident " + incidentId + " manually cleared by dispatcher");
+            return true;
+        }
+    }
+    return false;
+}
+
+void DispatchCenter::applyWeather(const std::string& weatherType, double multiplier) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    // Apply environmental friction multiplier to network segments
+    for (const auto& nodePair : m_network.getAllNodes()) {
+        const auto& segs = m_network.getOutgoingSegments(nodePair.first);
+        for (const auto& seg : segs) {
+            if (!seg.isBlocked) {
+                m_network.updateSegmentHazard(seg.fromNode, seg.toNode, "WEATHER_" + weatherType, multiplier, false);
+            }
+        }
+    }
+    m_analytics.logEvent(m_currentClockMinutes, "WEATHER_ALERT", weatherType, "METEOROLOGY",
+                         "Environmental Advisory: " + weatherType + " (x" + std::to_string(multiplier).substr(0,3) + " traffic delay)");
+    checkAndRerouteFleet();
+}
+
 std::string DispatchCenter::getFullTelemetryJson() const {
     std::lock_guard<std::mutex> lock(m_mutex);
     std::ostringstream oss;

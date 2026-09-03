@@ -55,6 +55,7 @@ public:
     void assignRoute(const std::vector<std::string>& path, const std::string& destNode, VehicleState newState);
     bool rerouteTo(const std::string& destNode, const RoadNetwork& network, RouteOptimizer& optimizer);
     bool checkAndRerouteIfBlocked(const RoadNetwork& network, RouteOptimizer& optimizer);
+    void recallToBase(const RoadNetwork& network, RouteOptimizer& optimizer);
 
     virtual void advanceSimulationTime(double deltaMinutes, const RoadNetwork& network, RouteOptimizer& optimizer);
     virtual double calculateSuitability(const Incident& incident, const RoadNetwork& network, RouteOptimizer& optimizer) const = 0;

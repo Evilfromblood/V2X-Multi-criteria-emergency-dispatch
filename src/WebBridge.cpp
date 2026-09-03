@@ -359,6 +359,56 @@ std::string WebBridge::handleHttpRequest(const std::string& method, const std::s
         return resp.str();
     }
 
+    if (method == "POST" && path == "/api/recall_vehicle") {
+        std::string vid = extractJsonField(body, "vehicleId");
+        bool ok = false;
+        if (m_dispatchCenter && !vid.empty()) {
+            ok = m_dispatchCenter->recallVehicle(vid);
+        }
+        std::string payload = ok ? "{\"status\":\"success\",\"recalled\":\"" + vid + "\"}" 
+                                 : "{\"status\":\"failed\",\"error\":\"Vehicle not found or already idle\"}";
+        resp << "HTTP/1.1 200 OK\r\n"
+             << "Content-Type: application/json\r\n"
+             << "Access-Control-Allow-Origin: *\r\n"
+             << "Content-Length: " << payload.size() << "\r\n"
+             << "Connection: close\r\n\r\n"
+             << payload;
+        return resp.str();
+    }
+
+    if (method == "POST" && path == "/api/resolve_incident") {
+        std::string incId = extractJsonField(body, "incidentId");
+        bool ok = false;
+        if (m_dispatchCenter && !incId.empty()) {
+            ok = m_dispatchCenter->resolveIncident(incId);
+        }
+        std::string payload = ok ? "{\"status\":\"success\",\"resolved\":\"" + incId + "\"}" 
+                                 : "{\"status\":\"failed\",\"error\":\"Incident not found\"}";
+        resp << "HTTP/1.1 200 OK\r\n"
+             << "Content-Type: application/json\r\n"
+             << "Access-Control-Allow-Origin: *\r\n"
+             << "Content-Length: " << payload.size() << "\r\n"
+             << "Connection: close\r\n\r\n"
+             << payload;
+        return resp.str();
+    }
+
+    if (method == "POST" && path == "/api/weather") {
+        std::string condition = extractJsonField(body, "condition");
+        double mult = extractJsonDouble(body, "multiplier", 2.0);
+        if (m_dispatchCenter) {
+            m_dispatchCenter->applyWeather(condition, mult);
+        }
+        std::string payload = "{\"status\":\"success\",\"condition\":\"" + condition + "\",\"multiplier\":" + std::to_string(mult) + "}";
+        resp << "HTTP/1.1 200 OK\r\n"
+             << "Content-Type: application/json\r\n"
+             << "Access-Control-Allow-Origin: *\r\n"
+             << "Content-Length: " << payload.size() << "\r\n"
+             << "Connection: close\r\n\r\n"
+             << payload;
+        return resp.str();
+    }
+
     // 404 Not Found
     std::string notFound = "{\"error\":\"Not Found\"}";
     resp << "HTTP/1.1 404 Not Found\r\n"
